@@ -20,6 +20,7 @@ import cv2
 import numpy as np
 from pydantic import BaseModel
 from ultralytics import YOLO
+from libs.config.settings import settings
 
 from zones import DEFAULT_ZONES, get_zones_for_point
 
@@ -54,8 +55,8 @@ class Detector:
 
     def __init__(
         self,
-        model_name: str = "yolov8n.pt",
-        confidence_threshold: float = 0.45,
+        model_name: str = "settings.yolo_model",
+        confidence_threshold: float = settings.confidence_threshold,
         device: str = "cpu",
     ) -> None:
         logger.info(f"Loading YOLO model: {model_name} on {device}")
@@ -158,8 +159,8 @@ def draw_detections(frame: np.ndarray, det_frame: DetectionFrame) -> np.ndarray:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Agentic Vision detection demo")
     parser.add_argument("--source", default="0", help="Video file path or camera index")
-    parser.add_argument("--model", default="yolov8n.pt", help="YOLO model name")
-    parser.add_argument("--conf", type=float, default=0.45, help="Confidence threshold")
+    parser.add_argument("--model", default="settings.yolo_model", help="YOLO model name")
+    parser.add_argument("--conf", type=float, default=settings.confidence_threshold, help="Confidence threshold")
     parser.add_argument("--output", default=None, help="Optional output video path")
     args = parser.parse_args()
 
@@ -170,7 +171,7 @@ def main() -> None:
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open source: {source}")
 
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    fps = cap.get(cv2.CAP_PROP_FPS) or settings.tracker_max_age
     width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     logger.info(f"Stream: {width}x{height} @ {fps:.1f} FPS")

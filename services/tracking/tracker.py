@@ -20,6 +20,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
+from libs.config.settings import settings
 
 # ── adjust sys.path so we can import sibling packages ──────────────────────
 import sys, os
@@ -48,13 +49,13 @@ class Tracker:
     """
 
     MAX_TRAJECTORY_LEN = 80   # max trajectory points stored per track
-    FPS_DEFAULT        = 30
+    FPS_DEFAULT        = settings.tracker_max_age
 
     def __init__(
         self,
         fps: float          = FPS_DEFAULT,
-        max_age: int        = 30,       # frames before a lost track is marked DEAD
-        n_init: int         = 3,        # frames before a track is CONFIRMED
+        max_age: int        = settings.tracker_max_age,       # frames before a lost track is marked DEAD
+        n_init: int         = settings.tracker_n_init,        # frames before a track is CONFIRMED
         max_cosine_distance: float = 0.4,
         camera_id: str      = "cam_01",
     ) -> None:
@@ -221,14 +222,14 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Phase 2 — Tracking demo")
     parser.add_argument("--source", default="0")
-    parser.add_argument("--model",  default="yolov8n.pt")
+    parser.add_argument("--model",  default="settings.yolo_model")
     parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
     source   = int(args.source) if args.source.isdigit() else args.source
     detector = Detector(model_name=args.model)
     cap      = cv2.VideoCapture(source)
-    fps      = cap.get(cv2.CAP_PROP_FPS) or 30
+    fps      = cap.get(cv2.CAP_PROP_FPS) or settings.tracker_max_age
     tracker  = Tracker(fps=fps)
 
     width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))

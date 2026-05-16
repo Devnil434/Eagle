@@ -6,7 +6,7 @@ Points must be in clockwise or counter-clockwise order.
 """
 from dataclasses import dataclass, field
 import numpy as np
-
+from libs.config.settings import settings
 
 @dataclass
 class Zone:
@@ -36,7 +36,7 @@ DEFAULT_ZONES: list[Zone] = [
     ),
     Zone(
         name="safe_corridor",
-        polygon=[(0, 0), (300, 0), (300, 480), (0, 480)],
+        polygon=[(0, 0), (settings.track_ttl_seconds, 0), (settings.track_ttl_seconds, 480), (0, 480)],
         alert_on_entry=False,
         color_bgr=(0, 255, 0),      # green
     ),

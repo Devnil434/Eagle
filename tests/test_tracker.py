@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import pytest
 from unittest.mock import MagicMock, patch
+from libs.config.settings import settings
 
 from libs.schemas.detection import DetectionFrameSchema, DetectionSchema, BoundingBox
 from libs.schemas.tracking  import TrackedFrame, TrackedObject, TrackState, TrajectoryPoint
@@ -94,12 +95,12 @@ def test_tracker_returns_tracked_frame(MockDeepSort):
 
     mock_ds = MagicMock()
     MockDeepSort.return_value = mock_ds
-    mock_ds.max_age = 30
+    mock_ds.max_age = settings.tracker_max_age
     mock_ds.update_tracks.return_value = [
         _make_mock_track(1, [100, 80, 50, 120])
     ]
 
-    tracker   = Tracker(fps=30)
+    tracker   = Tracker(fps=settings.tracker_max_age)
     det_frame = _make_det_frame(0, [[100, 80, 150, 200]])
     raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)
     result    = tracker.update(det_frame, raw_frame)
@@ -116,18 +117,18 @@ def test_dwell_time_accumulates(MockDeepSort):
 
     mock_ds = MagicMock()
     MockDeepSort.return_value = mock_ds
-    mock_ds.max_age = 30
+    mock_ds.max_age = settings.tracker_max_age
 
-    tracker   = Tracker(fps=30)
+    tracker   = Tracker(fps=settings.tracker_max_age)
     raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
     for i in range(10):
-        mock_ds.update_tracks.return_value = [_make_mock_track(1, [100, 80, 50, 120])]
+        mock_ds.update_tracks.return_value = [_make_mock_track(1, [100, 80, settings.max_events_per_track, 120])]
         det    = _make_det_frame(i, [[100, 80, 150, 200]])
         result = tracker.update(det, raw_frame)
 
     assert result.tracks[0].dwell_time_frames  == 10
-    assert result.tracks[0].dwell_time_seconds == pytest.approx(10 / 30, abs=0.01)
+    assert result.tracks[0].dwell_time_seconds == pytest.approx(10 / settings.tracker_max_age, abs=0.01)
 
 
 @patch("services.tracking.tracker.DeepSort")
@@ -137,13 +138,13 @@ def test_trajectory_grows_and_caps(MockDeepSort):
 
     mock_ds = MagicMock()
     MockDeepSort.return_value = mock_ds
-    mock_ds.max_age = 30
+    mock_ds.max_age = settings.tracker_max_age
 
-    tracker   = Tracker(fps=30)
+    tracker   = Tracker(fps=settings.tracker_max_age)
     raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
     for i in range(100):    # more than MAX_TRAJECTORY_LEN (80)
-        mock_ds.update_tracks.return_value = [_make_mock_track(1, [100+i, 80, 50, 120])]
+        mock_ds.update_tracks.return_value = [_make_mock_track(1, [100+i, 80, settings.max_events_per_track, 120])]
         result = tracker.update(_make_det_frame(i, [[100+i, 80, 150+i, 200]]), raw_frame)
 
     assert len(result.tracks[0].trajectory) == tracker.MAX_TRAJECTORY_LEN
@@ -156,10 +157,10 @@ def test_born_lifecycle_event_emitted(MockDeepSort):
 
     mock_ds = MagicMock()
     MockDeepSort.return_value = mock_ds
-    mock_ds.max_age = 30
-    mock_ds.update_tracks.return_value = [_make_mock_track(42, [100, 80, 50, 120])]
+    mock_ds.max_age = settings.tracker_max_age
+    mock_ds.update_tracks.return_value = [_make_mock_track(42, [100, 80, settings.max_events_per_track, 120])]
 
-    tracker   = Tracker(fps=30)
+    tracker   = Tracker(fps=settings.tracker_max_age)
     raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)
     tracker.update(_make_det_frame(0, [[100, 80, 150, 200]]), raw_frame)
 
@@ -176,14 +177,14 @@ def test_born_only_fires_once_per_id(MockDeepSort):
 
     mock_ds = MagicMock()
     MockDeepSort.return_value = mock_ds
-    mock_ds.max_age = 30
+    mock_ds.max_age = settings.tracker_max_age
 
-    tracker   = Tracker(fps=30)
+    tracker   = Tracker(fps=settings.tracker_max_age)
     raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)
     all_events = []
 
     for i in range(5):
-        mock_ds.update_tracks.return_value = [_make_mock_track(5, [100, 80, 50, 120])]
+        mock_ds.update_tracks.return_value = [_make_mock_track(5, [100, 80, settings.max_events_per_track, 120])]
         tracker.update(_make_det_frame(i, [[100, 80, 150, 200]]), raw_frame)
         all_events += tracker.drain_lifecycle_events()
 
@@ -198,16 +199,16 @@ def test_multiple_tracks_get_unique_ids(MockDeepSort):
 
     mock_ds = MagicMock()
     MockDeepSort.return_value = mock_ds
-    mock_ds.max_age = 30
+    mock_ds.max_age = settings.tracker_max_age
     mock_ds.update_tracks.return_value = [
-        _make_mock_track(1, [50,  80, 50, 120]),
-        _make_mock_track(2, [400, 80, 50, 120]),
+        _make_mock_track(1, [settings.max_events_per_track,  80, settings.max_events_per_track, 120]),
+        _make_mock_track(2, [400, 80, settings.max_events_per_track, 120]),
     ]
 
-    tracker   = Tracker(fps=30)
+    tracker   = Tracker(fps=settings.tracker_max_age)
     raw_frame = np.zeros((480, 640, 3), dtype=np.uint8)
     result    = tracker.update(
-        _make_det_frame(0, [[50, 80, 100, 200], [400, 80, 450, 200]]),
+        _make_det_frame(0, [[settings.max_events_per_track, 80, 100, 200], [400, 80, 450, 200]]),
         raw_frame,
     )
     ids = {t.track_id for t in result.tracks}

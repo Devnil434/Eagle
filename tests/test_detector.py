@@ -1,3 +1,4 @@
+from libs.config.settings import settings
 import pytest
 from pydantic import ValidationError
 from libs.schemas.detection import BoundingBox, DetectionSchema, DetectionFrameSchema
@@ -26,7 +27,7 @@ def test_detection_frame_schema_stores_detections():
     det = DetectionSchema(
         label="car",
         confidence=0.9,
-        bbox=BoundingBox(x1=0, y1=0, x2=50, y2=50)
+        bbox=BoundingBox(x1=0, y1=0, x2=settings.max_events_per_track, y2=settings.max_events_per_track)
     )
     frame = DetectionFrameSchema(frame_id=1, detections=[det])
     assert len(frame.detections) == 1
