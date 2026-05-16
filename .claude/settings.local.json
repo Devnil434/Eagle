@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python.exe -c \"import pydantic; print\\(pydantic.__version__\\)\")",
+      "Bash(venv/Scripts/python.exe -c \"from services.detection.detector import Detector\")",
+      "Bash(git checkout *)"
+    ]
+  }
+}

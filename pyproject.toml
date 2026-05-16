@@ -1,2 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eagle-surveillance"
+version = "0.1.0"
+description = "Real-time semantic surveillance with detection, tracking, and human feedback"
+requires-python = ">=3.10"
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "redis>=2.0.1",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "uvicorn[standard]>=0.24.0",
+    "aiofiles>=23.0.0",
+    "numpy>=1.24.0",
+    "opencv-python>=4.8.0",
+    "ultralytics>=8.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "prometheus-client>=0.19.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.setuptools]
+packages = ["apps", "libs", "services", "scripts"]
+
+[tool.setuptools.package-dir]
+apps = "apps"
+libs = "libs"
+services = "services"
+scripts = "scripts"
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

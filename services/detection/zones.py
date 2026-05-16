@@ -1,56 +1,72 @@
 """
-zones.py — Define restricted polygon regions for the scene.
+services/detection/zones.py
 
-A zone is a named polygon defined as a list of (x, y) pixel coordinates.
-Points must be in clockwise or counter-clockwise order.
+Zone definitions are loaded dynamically from YAML using ZoneConfigLoader.
+Static DEFAULT_ZONES have been removed in favor of runtime configuration.
 """
-from dataclasses import dataclass, field
-import numpy as np
-from libs.config.settings import settings
 
+from __future__ import annotations
+
+import logging
+import cv2
+import numpy as np
+from dataclasses import dataclass
+from libs.config.zone_loader import ZoneConfigLoader
+
+logger = logging.getLogger(__name__)
+
+
+# ── Data Model (compatibility only) ─────────────────────────────
 @dataclass
 class Zone:
     name: str
-    polygon: list[tuple[int, int]]  # list of (x, y) corner points
+    polygon: list[tuple[int, int]]
     alert_on_entry: bool = True
-    color_bgr: tuple[int, int, int] = (0, 0, 255)  # red by default
+    color_bgr: tuple[int, int, int] = (0, 0, 255)
 
     def as_array(self) -> np.ndarray:
-        """Return polygon as numpy array for cv2.pointPolygonTest."""
         return np.array(self.polygon, dtype=np.int32)
 
 
-# ─── Default zones for a sample indoor corridor scene ───────────────────────
-DEFAULT_ZONES: list[Zone] = [
-    Zone(
-        name="restricted_door",
-        polygon=[(540, 200), (740, 200), (740, 480), (540, 480)],
-        alert_on_entry=True,
-        color_bgr=(0, 0, 255),      # red
-    ),
-    Zone(
-        name="keypad_area",
-        polygon=[(620, 280), (720, 280), (720, 420), (620, 420)],
-        alert_on_entry=True,
-        color_bgr=(0, 165, 255),    # orange
-    ),
-    Zone(
-        name="safe_corridor",
-        polygon=[(0, 0), (settings.track_ttl_seconds, 0), (settings.track_ttl_seconds, 480), (0, 480)],
-        alert_on_entry=False,
-        color_bgr=(0, 255, 0),      # green
-    ),
-]
+# ── Zone Loader (production system) ─────────────────────────────
+_loader = ZoneConfigLoader()
+_loader.start()
 
 
-def point_in_zone(x: float, y: float, zone: Zone) -> bool:
-    """Return True if point (x, y) is inside the zone polygon."""
-    import cv2
-    result = cv2.pointPolygonTest(zone.as_array(), (float(x), float(y)), False)
+# ── Core API ────────────────────────────────────────────────────
+def get_zones() -> list[dict]:
+    """
+    Return zones from YAML config (live reloaded).
+    Each zone is a dict: name, polygon, alert_on_entry, color_hex
+    """
+    return _loader.get_zones()
+
+
+def get_camera_id() -> str | None:
+    """Return active camera ID from config."""
+    return _loader.get_camera_id()
+
+
+# ── Geometry Helpers ────────────────────────────────────────────
+def point_in_zone(x: float, y: float, zone) -> bool:
+    """
+    Check if a point is inside a polygon zone.
+    Supports both dict-based and Zone objects.
+    """
+    polygon = zone["polygon"] if isinstance(zone, dict) else zone.polygon
+    polygon_np = np.array(polygon, dtype=np.int32)
+
+    result = cv2.pointPolygonTest(polygon_np, (float(x), float(y)), False)
     return result >= 0
 
 
-def get_zones_for_point(x: float, y: float, zones: list[Zone] | None = None) -> list[Zone]:
-    """Return all zones that contain point (x, y)."""
-    zones = zones or DEFAULT_ZONES
+def get_zones_for_point(x: float, y: float, zones=None) -> list:
+    """
+    Return all zones containing the given point.
+    """
+    zones = zones or get_zones()
     return [z for z in zones if point_in_zone(x, y, z)]
+
+
+# ── Backward compatibility ──────────────────────────────────────
+DEFAULT_ZONES = get_zones()

@@ -211,6 +211,36 @@ Eagle/
 - Docker + Docker Compose
 - [Ollama](https://ollama.ai) (for local LLaVA-Next)
 
+
+## ⚡ Quick Start (with Make)
+
+> All commands are available via `make`. Run `make help` for the full list.
+
+```bash
+make install   # install dependencies
+make up        # start services
+make demo      # run the demo
+```
+
+## 🛠 Developer Commands
+
+| Command | Description |
+|---|---|
+| `make install` | Install backend dependencies |
+| `make install-frontend` | Install frontend npm dependencies |
+| `make setup` | Full dev setup (backend + frontend) |
+| `make test` | Run pytest suite |
+| `make lint` | Run ruff and black checks |
+| `make coverage` | Run tests with coverage |
+| `make up` | Start docker services |
+| `make down` | Stop docker services |
+| `make demo` | Run detection demo |
+| `make clean` | Remove temporary/cache files |
+| `make help` | Print usage summary |
+
+
+## Manual Setup
+
 ### 1. Clone the repository
 
 ```bash
@@ -248,7 +278,7 @@ ollama pull llava:latest
 ### 6. Run detection on a sample video
 
 ```bash
-python services/detection/detector.py --source data/sample_videos/sample.mp4
+python services/detection/detection.py --source data/sample_videos/sample.mp4
 ```
 
 ### 7. Start the backend API

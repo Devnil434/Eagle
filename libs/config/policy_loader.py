@@ -1,11 +1,12 @@
 from __future__ import annotations
-import os
 import yaml
 from pathlib import Path
 
+from libs.config.settings import Settings
+
 class PolicyLoader:
     def __init__(self):
-        self.policy_path = os.getenv("POLICY_PATH", "policies/default.yaml")
+        self.policy_path = Settings().policy_path
         self._cache = None
         self._last_mtime = 0
 

@@ -51,3 +51,34 @@ class TrackLifecycleEvent(BaseModel):
     zones_present: list[str]               = Field(default_factory=list)
     dwell_time_seconds: float              = 0.0
     timestamp_ms: float                    = 0.0
+
+    def to_jsonl_dict(self) -> dict:
+        """
+        Return a dict matching the Issue #14 JSONL schema.
+
+        Mapping rules
+        -------------
+        * Internal ``BORN`` → output ``BIRTH`` (per issue spec).
+        * ``zone`` is the first entry in ``zones_present``, or ``"unknown"``.
+        * ``dwell_time_sec`` is included only for ``LOST`` events.
+        * ISO-8601 ``timestamp`` derived from ``timestamp_ms``.
+        """
+        from datetime import datetime, timezone
+
+        event_name = "BIRTH" if self.event == TrackState.BORN else self.event.value
+        ts_iso = datetime.fromtimestamp(
+            self.timestamp_ms / 1000.0, tz=timezone.utc
+        ).isoformat()
+
+        record: dict = {
+            "event": event_name,
+            "track_id": self.track_id,
+            "timestamp": ts_iso,
+        }
+
+        if self.event == TrackState.BORN:
+            record["zone"] = self.zones_present[0] if self.zones_present else "unknown"
+        elif self.event == TrackState.LOST:
+            record["dwell_time_sec"] = round(self.dwell_time_seconds, 2)
+
+        return record

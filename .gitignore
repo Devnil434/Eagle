@@ -1,8 +1,2 @@
 __pycache__/
 *.pyc
-.env
-venv/
-.venv/
-*.pt        # model weights
-*.onnx
-data/sample_videos/*.mp4

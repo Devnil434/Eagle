@@ -1,0 +1,25 @@
+name: Phase 3 — Memory Tests
+
+on:
+  push:
+    paths:
+      - "services/memory/**"
+      - "libs/schemas/memory.py"
+      - "tests/test_memory.py"
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -r services/memory/requirements.txt
+      - name: Lint
+        run: ruff check services/memory/ libs/schemas/memory.py
+      - name: Test (no Redis required — uses fakeredis)
+        run: pytest tests/test_memory.py -v --tb=short --cov=services/memory --cov-report=term-missing
