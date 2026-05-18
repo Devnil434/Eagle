@@ -5,7 +5,10 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 from prometheus_client import generate_latest
 
-from libs.observability.metrics import frames_processed_total
+# from libs.observability.metrics import frames_processed_total
+
+from apps.backend.routes.alerts import router as alert_router
+
 
 app = FastAPI()
 
@@ -36,3 +39,5 @@ def health():
 @app.get("/metrics")
 async def metrics():
     return Response(generate_latest(), media_type="text/plain")
+
+app.include_router(alert_router)
