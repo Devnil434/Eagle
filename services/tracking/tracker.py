@@ -277,6 +277,14 @@ class Tracker:
         zones: list[str],
         dwell_secs: float,
     ) -> None:
+        """Create and queue a lifecycle event, optionally logging it.
+
+        Args:
+        state: TrackState value (BORN, LOST, or DEAD).
+        track_id: Unique integer ID of the track.
+        zones: List of zone names the track is currently in.
+        dwell_secs: Total dwell time in seconds at time of event.
+        """
         event = TrackLifecycleEvent(
             event=state,
             track_id=track_id,
@@ -295,6 +303,15 @@ class Tracker:
         a: np.ndarray,
         b: np.ndarray,
     ) -> float:
+        """Compute cosine similarity between two embedding vectors.
+
+        Args:
+            a: First embedding vector.
+            b: Second embedding vector.
+
+        Returns:
+            Float in range [0.0, 1.0]. Returns 0.0 if either vector has zero norm.
+        """
         norm_product = np.linalg.norm(a) * np.linalg.norm(b)
         if norm_product == 0:
             return 0.0
@@ -306,6 +323,11 @@ class Tracker:
 
 
 def main() -> None:
+    """Run the tracking demo from CLI.
+
+    Chains Phase 1 detection with Phase 2 tracking, renders annotated
+    output, and logs lifecycle events to console.
+    """
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

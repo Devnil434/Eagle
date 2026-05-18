@@ -13,13 +13,11 @@ Usage (API):
 from __future__ import annotations
 import argparse
 import logging
-from pathlib import Path
 
 import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from libs.schemas.detection import DetectionFrameSchema, DetectionSchema, BoundingBox
 from services.detection.zones import DEFAULT_ZONES, get_zones_for_point
 from libs.config.settings import settings
 
@@ -102,7 +100,19 @@ LABEL_COLORS: dict[str, tuple[int, int, int]] = {
 }
 
 def draw_detections(frame: np.ndarray, det_frame: DetectionFrame) -> np.ndarray:
-    """Draw bounding boxes, labels, and zone overlays onto frame."""
+    """Draw bounding boxes, labels, and zone overlays onto a frame.
+
+    Args:
+        frame: Original BGR image as numpy array (H, W, 3).
+        det_frame: DetectionFrame containing all detections for this frame.
+
+    Returns:
+        Annotated BGR image with bounding boxes, zone polygons, and HUD overlay.
+
+    Example:
+        annotated = draw_detections(frame, det_frame)
+        cv2.imshow("Output", annotated)
+    """
     out = frame.copy()
 
     # Draw zone polygons
@@ -140,7 +150,13 @@ def draw_detections(frame: np.ndarray, det_frame: DetectionFrame) -> np.ndarray:
 
 # ─── CLI Entry Point ─────────────────────────────────────────────────────────
 
+
 def main() -> None:
+    """Run the detection demo from CLI.
+
+    Reads from a video file or webcam, runs YOLO inference per frame,
+    and displays annotated output. Optionally saves to an output video file.
+    """
     parser = argparse.ArgumentParser(description="Run Agentic Vision detection demo")
     parser.add_argument("--source", default="0", help="Video file path or camera index")
     parser.add_argument("--model", default=settings.detector_model, help="YOLO model name")
