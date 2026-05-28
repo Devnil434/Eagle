@@ -1,0 +1,6 @@
+global: {}
+zones: []
+detection:
+  model: yolov8n.pt
+  min_confidence: 0.45
+  classes: [0]

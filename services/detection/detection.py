@@ -25,9 +25,10 @@ from services.reasoning.scene_graph import SceneGraphBuilder
 from services.reasoning.prompts import build_reasoning_prompt
 from libs.schemas.detection import DetectionFrameSchema, DetectionSchema, BoundingBox
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Iterable
 
 from services.detection.zones import DEFAULT_ZONES, get_zones_for_point
+from libs.config.policy_loader import PolicyLoader
 from libs.config.settings import settings
 
 
@@ -64,13 +65,33 @@ class Detector:
     def __init__(
         self,
         model_name: str = settings.detector_model,
-        confidence_threshold: float = 0.45,
+        confidence_threshold: float = settings.detection_min_confidence,
         device: str = "cpu",
+        policy_loader: PolicyLoader | None = None,
     ) -> None:
+        policy = (policy_loader or PolicyLoader()).load_policy()
+        detection_cfg = policy.get("detection", {}) if isinstance(policy, dict) else {}
+
+        model_name = detection_cfg.get("model", model_name)
+        confidence_threshold = float(detection_cfg.get("min_confidence", confidence_threshold))
+        class_ids = detection_cfg.get("classes")
+
         logger.info(f"Loading YOLO model: {model_name} on {device}")
         self.model = YOLO(model_name)
         self.conf = confidence_threshold
         self.device = device
+        self.allowed_labels = self._resolve_allowed_labels(class_ids)
+
+    def _resolve_allowed_labels(self, class_ids: Iterable[int] | None) -> set[str]:
+        if class_ids is None:
+            return set(self.TARGET_LABELS)
+        labels: set[str] = set()
+        for cid in class_ids:
+            try:
+                labels.add(self.model.names[int(cid)])
+            except (ValueError, KeyError, IndexError, TypeError):
+                continue
+        return labels or set(self.TARGET_LABELS)
 
     def detect(self, frame: np.ndarray, frame_id: int = 0) -> DetectionFrame:
         """
@@ -83,7 +104,7 @@ class Detector:
         Returns:
             DetectionFrame with all detected objects and zone memberships.
         """
-        results = self.model(frame, conf=self.conf, device=self.device, verbose=False)
+        results = self.model(frame, conf=0.0, device=self.device, verbose=False)
         detections: list[Detection] = []
 
         active_zones = get_zones()
@@ -94,7 +115,15 @@ class Detector:
             results[0].boxes.cls.cpu().numpy(),
         ):
             label = self.model.names[int(cls_id)]
-            if label not in self.TARGET_LABELS:
+            if label not in self.allowed_labels:
+                continue
+            if float(conf) < self.conf:
+                logger.debug(
+                    "Dropped detection: class=%s, conf=%.2f (below threshold %.2f)",
+                    label,
+                    float(conf),
+                    self.conf,
+                )
                 continue
 
             x1, y1, x2, y2 = box.tolist()
@@ -174,7 +203,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run Agentic Vision detection demo")
     parser.add_argument("--source", default="0", help="Video file path or camera index")
     parser.add_argument("--model", default=settings.detector_model, help="YOLO model name")
-    parser.add_argument("--conf", type=float, default=0.45, help="Confidence threshold")
+    parser.add_argument("--conf", type=float, default=settings.detection_min_confidence, help="Confidence threshold")
     parser.add_argument("--output", default=None, help="Optional output video path")
     args = parser.parse_args()
 

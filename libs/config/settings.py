@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     keypad_center_y: int = 240
     policy_path: str = "policies/default.yaml"
     detector_model: str = "yolov8n.pt"
+    detection_min_confidence: float = 0.45
     detection_confidence_threshold: float = 0.45
     detector_device: str = "cpu"
     tracker_fps: float = 30
@@ -36,6 +37,14 @@ class Settings(BaseSettings):
     kafka_topic: str = "track-events"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    def model_post_init(self, __context) -> None:
+        # Backwards-compat: if only one threshold is set, mirror it to the other.
+        fields_set = self.model_fields_set
+        if "detection_min_confidence" in fields_set and "detection_confidence_threshold" not in fields_set:
+            object.__setattr__(self, "detection_confidence_threshold", self.detection_min_confidence)
+        elif "detection_confidence_threshold" in fields_set and "detection_min_confidence" not in fields_set:
+            object.__setattr__(self, "detection_min_confidence", self.detection_confidence_threshold)
 
 
 settings = Settings()
