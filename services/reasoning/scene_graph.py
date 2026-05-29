@@ -1,147 +1,126 @@
-# services/reasoning/scene_graph.py
-
-import math
+﻿"""
+Scene Graph Manager for surveillance reasoning.
+Builds a dynamic NetworkX MultiDiGraph from a TrackedFrame
+and serializes it into an LLM-ready prompt snippet.
+"""
+from __future__ import annotations
 
 import networkx as nx
+from libs.schemas.graph import GraphNode, GraphEdge, NodeType, EdgeType
 
-from libs.observability.metrics import reasoning_triggers_total
-from services.detection.zones import DEFAULT_ZONES
 
-INTERACTION_OBJECTS = [
-    "backpack",
-    "handbag",
-    "cell phone",
-    "laptop"
-]
-class SceneGraphBuilder:
-    def serialize_graph(self):
+class SceneGraph:
+    """Wraps a NetworkX MultiDiGraph with helper methods for surveillance scenes."""
 
-        serialized = []
+    MAX_PROMPT_TOKENS = 300
 
-        for source, target, data in self.graph.edges(data=True):
+    def __init__(self, timestamp: float = 0.0):
+        self.timestamp = timestamp
+        self.graph: nx.MultiDiGraph = nx.MultiDiGraph()
 
-            relation = data.get("relation")
+    def add_node(self, node: GraphNode) -> None:
+        self.graph.add_node(
+            node.id,
+            node_type=node.node_type.value,
+            label=node.label or node.id,
+        )
 
-            edge_text = f"{source} -> [{relation}] -> {target}"
+    def add_edge(self, edge: GraphEdge) -> None:
+        attrs = {"edge_type": edge.edge_type.value}
+        if edge.distance_px is not None:
+            attrs["distance_px"] = edge.distance_px
+        self.graph.add_edge(edge.source, edge.target, **attrs)
 
-            if "distance" in data:
+    @classmethod
+    def from_tracked_frame(cls, frame) -> "SceneGraph":
+        sg = cls(timestamp=getattr(frame, "timestamp", 0.0))
 
-                edge_text += f" (distance={data['distance']})"
+        # Add zones (skip if missing id)
+        for zone in getattr(frame, "zones", []):
+            zone_id = zone.get("id")
+            if zone_id:
+                sg.add_node(GraphNode(id=zone_id, node_type=NodeType.ZONE))
 
-            serialized.append(edge_text)
+        # Add objects and their belongs_to relationships
+        for obj in getattr(frame, "objects", []):
+            obj_id = obj.get("id")
+            if not obj_id:
+                continue
+            sg.add_node(GraphNode(id=obj_id, node_type=NodeType.OBJECT))
+            belongs_to = obj.get("belongs_to")
+            if belongs_to:
+                sg.add_node(GraphNode(id=belongs_to, node_type=NodeType.ZONE))
+                sg.add_edge(GraphEdge(
+                    source=obj_id,
+                    target=belongs_to,
+                    edge_type=EdgeType.INSIDE,
+                ))
 
-        return "\n".join(serialized)
+        # Add persons and their relationships
+        for person in getattr(frame, "persons", []):
+            pid = person.get("id")
+            if not pid:
+                continue
+            sg.add_node(GraphNode(id=pid, node_type=NodeType.PERSON))
 
-    def __init__(self, det_frame):
+            # INSIDE relationship
+            zone = person.get("zone")
+            if zone:
+                sg.add_node(GraphNode(id=zone, node_type=NodeType.ZONE))
+                sg.add_edge(GraphEdge(
+                    source=pid,
+                    target=zone,
+                    edge_type=EdgeType.INSIDE,
+                ))
 
-        self.det_frame = det_frame
-        self.graph = nx.MultiDiGraph()
+            # NEAR relationships
+            for nearby in person.get("nearby_objects", []):
+                obj_id = nearby.get("id")
+                if not obj_id:
+                    continue
+                dist = nearby.get("distance_px")
+                sg.add_node(GraphNode(id=obj_id, node_type=NodeType.OBJECT))
+                sg.add_edge(GraphEdge(
+                    source=pid,
+                    target=obj_id,
+                    edge_type=EdgeType.NEAR,
+                    distance_px=dist,
+                ))
 
-    def calculate_distance(self, center1, center2):
+            # INTERACTING_WITH relationships
+            for obj_id in person.get("interacting_with", []):
+                if not obj_id:
+                    continue
+                sg.add_node(GraphNode(id=obj_id, node_type=NodeType.OBJECT))
+                sg.add_edge(GraphEdge(
+                    source=pid,
+                    target=obj_id,
+                    edge_type=EdgeType.INTERACTING_WITH,
+                ))
 
-        x1, y1 = center1
-        x2, y2 = center2
+        return sg
 
-        return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    def to_prompt_str(self) -> str:
+        lines = [f"Scene graph at t={self.timestamp:.1f}s:", ""]
 
-    def build_graph(self):
+        for src, dst, data in self.graph.edges(data=True):
+            edge_type = data.get("edge_type", "RELATED_TO")
+            dist = data.get("distance_px")
+            if edge_type == EdgeType.NEAR.value and dist is not None:
+                edge_label = f"{edge_type}({int(dist)}px)"
+            else:
+                edge_label = edge_type
+            lines.append(f"{src} \u2192 {edge_label} \u2192 {dst}")
 
-        reasoning_triggers_total.inc()
+        serialized = "\n".join(lines)
+        # Rough trim if over 200 words (≈260 tokens, safe under 300)
+        words = serialized.split()
+        if len(words) > 200:
+            serialized = " ".join(words[:200]) + "\n[...truncated]"
+        return serialized
 
-        self.graph.clear()
+    def node_count(self) -> int:
+        return self.graph.number_of_nodes()
 
-        # Add zone nodes
-        for zone in DEFAULT_ZONES:
-
-            self.graph.add_node(
-                zone.name,
-                type="zone"
-            )
-
-        detections = self.det_frame.detections
-
-        # Add detection nodes
-        for idx, det in enumerate(detections):
-
-            node_name = f"{det.label}_{idx}"
-
-            self.graph.add_node(
-                node_name,
-                type=det.label,
-                center=det.center
-            )
-
-            # Zone relationships
-            for zone_name in det.zones_present:
-
-                self.graph.add_edge(
-                    node_name,
-                    zone_name,
-                    relation="INSIDE"
-                )
-
-        # Object relationships
-        for i in range(len(detections)):
-
-            for j in range(i + 1, len(detections)):
-
-                det1 = detections[i]
-                det2 = detections[j]
-
-                node1 = f"{det1.label}_{i}"
-                node2 = f"{det2.label}_{j}"
-
-                dist = self.calculate_distance(
-                    det1.center,
-                    det2.center
-                )
-
-                # NEAR relationship
-                if dist < 150:
-
-                    self.graph.add_edge(
-                        node1,
-                        node2,
-                        relation="NEAR",
-                        distance=round(dist, 2)
-                    )
-
-                person_node = None
-                object_node = None
-
-                # Interaction detection
-                if (
-                    det1.label == "person"
-                    and det2.label in INTERACTION_OBJECTS
-                ):
-
-                    person_node = node1
-                    object_node = node2
-
-                elif (
-                    det2.label == "person"
-                    and det1.label in INTERACTION_OBJECTS
-                ):
-
-                    person_node = node2
-                    object_node = node1
-
-                # INTERACTING_WITH
-                if person_node and dist < 60:
-
-                    self.graph.add_edge(
-                        person_node,
-                        object_node,
-                        relation="INTERACTING_WITH"
-                    )
-
-                # HOLDING
-                elif person_node and 60 <= dist < 80:
-
-                    self.graph.add_edge(
-                        person_node,
-                        object_node,
-                        relation="HOLDING"
-                    )
-
-        return self.graph
+    def edge_count(self) -> int:
+        return self.graph.number_of_edges()

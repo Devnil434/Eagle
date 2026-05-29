@@ -9,7 +9,6 @@ Supports:
 """
 
 import os
-import time
 import threading
 import logging
 from pathlib import Path

@@ -2,3 +2,5 @@ fastapi==0.136.1
 uvicorn==0.29.0
 redis==5.0.4
 prometheus-client==0.20.0
+httpx==0.27.0
+anyio==4.3.0

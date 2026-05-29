@@ -1,7 +1,17 @@
 # Add to services/memory/requirements.txt
 redis==5.0.4
+numpy>=1.24.0
 pydantic>=2.10.0
+pydantic-settings>=2.0.0
+confluent-kafka>=2.3.0
 pytest==8.1.1
 pytest-mock==3.14.0
 fakeredis==2.21.3
 ruff==0.4.1
+pytest-cov
+prometheus_client>=0.14.0
+# services/reasoning/requirements.txt
+httpx==0.27.0          # Ollama VLM calls
+google-generativeai==0.7.2   # Gemini (optional)
+pytest==8.1.1
+

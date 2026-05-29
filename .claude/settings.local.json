@@ -3,7 +3,9 @@
     "allow": [
       "Bash(venv/Scripts/python.exe -c \"import pydantic; print\\(pydantic.__version__\\)\")",
       "Bash(venv/Scripts/python.exe -c \"from services.detection.detector import Detector\")",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(pip install *)",
+      "Bash(python -c \"import sys, os; sys.path.insert\\(0, os.getcwd\\(\\)\\); from libs.schemas.memory import TrackEvent, TrackSequence, ActionHint; from services.memory.memory import MemoryStore, MAX_EVENTS_PER_TRACK; print\\('OK'\\)\")"
     ]
   }
 }

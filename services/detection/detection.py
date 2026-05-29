@@ -13,14 +13,36 @@ Usage (API):
 from __future__ import annotations
 import argparse
 import logging
-from pathlib import Path
 
 import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from libs.schemas.detection import DetectionFrameSchema, DetectionSchema, BoundingBox
-from services.detection.zones import DEFAULT_ZONES, get_zones_for_point
+from libs.schemas.detection import DetectionFrameSchema as DetectionFrame, DetectionSchema as Detection, BoundingBox
+from services.detection.zones import get_zones, get_zones_for_point
+from services.reasoning.scene_graph import SceneGraphBuilder
+from services.reasoning.prompts import build_reasoning_prompt
+from dataclasses import dataclass
+from typing import List, Tuple
+
+from libs.config.settings import settings
+
+
+@dataclass
+class Detection:
+    label: str
+    bbox: List[float]
+    confidence: float
+    center: Tuple[float, float]
+    zones_present: List[str]
+
+
+@dataclass
+class DetectionFrame:
+    frame_id: int
+    detections: List[Detection]
+    timestamp_ms: float
+    camera_id: str = "cam_01"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,10 +60,14 @@ class Detector:
 
     def __init__(
         self,
-        model_name: str = "yolov8n.pt",
-        confidence_threshold: float = 0.45,
-        device: str = "cpu",
+        model_name: str = settings.detector_model,
+        confidence_threshold: float = settings.detection_confidence_threshold,
+        device: str = settings.detector_device,
     ) -> None:
+        if not 0.0 <= confidence_threshold <= 1.0:
+            raise ValueError(
+                f"confidence_threshold must be between 0.0 and 1.0, got {confidence_threshold}"
+            )
         logger.info(f"Loading YOLO model: {model_name} on {device}")
         self.model = YOLO(model_name)
         self.conf = confidence_threshold
@@ -58,8 +84,10 @@ class Detector:
         Returns:
             DetectionFrame with all detected objects and zone memberships.
         """
-        results = self.model(frame, conf=self.conf, device=self.device, verbose=False)
+        results = self.model(frame, device=self.device, verbose=False)
         detections: list[Detection] = []
+
+        active_zones = get_zones()
 
         for box, conf, cls_id in zip(
             results[0].boxes.xyxy.cpu().numpy(),
@@ -70,14 +98,21 @@ class Detector:
             if label not in self.TARGET_LABELS:
                 continue
 
+            if float(conf) < self.conf:
+                logger.debug(
+                    f"Dropped detection: class={label}, conf={float(conf):.2f} "
+                    f"(below threshold {self.conf})"
+                )
+                continue
+
             x1, y1, x2, y2 = box.tolist()
             cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
 
-            zones = [z.name for z in get_zones_for_point(cx, cy)]
+            zones = [z.name for z in get_zones_for_point(cx, cy, zones=active_zones)]
 
             detections.append(Detection(
                 label=label,
-                bbox=[x1, y1, x2, y2],
+                bbox=BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2),
                 confidence=float(conf),
                 center=(cx, cy),
                 zones_present=zones,
@@ -104,8 +139,12 @@ def draw_detections(frame: np.ndarray, det_frame: DetectionFrame) -> np.ndarray:
     """Draw bounding boxes, labels, and zone overlays onto frame."""
     out = frame.copy()
 
+    active_zones = get_zones()
+
     # Draw zone polygons
-    for zone in DEFAULT_ZONES:
+    for zone in active_zones:
+        if not getattr(zone, 'valid', True):
+            continue
         pts = zone.as_array().reshape((-1, 1, 2))
         overlay = out.copy()
         cv2.fillPoly(overlay, [pts], zone.color_bgr)
@@ -116,7 +155,7 @@ def draw_detections(frame: np.ndarray, det_frame: DetectionFrame) -> np.ndarray:
 
     # Draw detections
     for det in det_frame.detections:
-        x1, y1, x2, y2 = [int(v) for v in det.bbox]
+        x1, y1, x2, y2 = int(det.bbox.x1), int(det.bbox.y1), int(det.bbox.x2), int(det.bbox.y2)
         color = LABEL_COLORS.get(det.label, (200, 200, 200))
         cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
 
@@ -142,8 +181,8 @@ def draw_detections(frame: np.ndarray, det_frame: DetectionFrame) -> np.ndarray:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run Agentic Vision detection demo")
     parser.add_argument("--source", default="0", help="Video file path or camera index")
-    parser.add_argument("--model", default="yolov8n.pt", help="YOLO model name")
-    parser.add_argument("--conf", type=float, default=0.45, help="Confidence threshold")
+    parser.add_argument("--model", default=settings.detector_model, help="YOLO model name")
+    parser.add_argument("--conf", type=float, default=settings.detection_confidence_threshold, help="Confidence threshold")
     parser.add_argument("--output", default=None, help="Optional output video path")
     args = parser.parse_args()
 

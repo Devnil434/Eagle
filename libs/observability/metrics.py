@@ -67,5 +67,49 @@ if "agentic_track_dwell_seconds" not in REGISTRY._names_to_collectors:
     )
 
 else:
-
+    
     track_dwell_seconds = REGISTRY._names_to_collectors["agentic_track_dwell_seconds"]
+    
+    # Workflow execution counter
+    if "agentic_workflow_executions_total" not in REGISTRY._names_to_collectors:
+        
+        workflow_executions_total = Counter(
+            "agentic_workflow_executions_total",
+            "Total workflow executions"
+        )
+
+    else:
+        
+        workflow_executions_total = REGISTRY._names_to_collectors[
+            "agentic_workflow_executions_total"
+        ]
+        
+    # Workflow failures counter
+    if "agentic_workflow_failures_total" not in REGISTRY._names_to_collectors:
+
+        workflow_failures_total = Counter(
+            "agentic_workflow_failures_total",
+            "Total workflow failures"
+        )
+
+    else:
+
+        workflow_failures_total = REGISTRY._names_to_collectors[
+            "agentic_workflow_failures_total"
+        ]
+
+
+    # Workflow duration histogram
+    if "agentic_workflow_duration_seconds" not in REGISTRY._names_to_collectors:
+
+        workflow_duration_seconds = Histogram(
+            "agentic_workflow_duration_seconds",
+            "Workflow execution duration",
+            buckets=[1, 5, 10, 30, 60]
+        )
+
+    else:
+
+        workflow_duration_seconds = REGISTRY._names_to_collectors[
+            "agentic_workflow_duration_seconds"
+        ]

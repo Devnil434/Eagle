@@ -16,11 +16,12 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 from urllib.parse import urlsplit, urlunsplit
+from libs.config.settings import settings
 
 import redis
 
 DEFAULT_CAMERA_ID = "cam_01"
-DEFAULT_REDIS_URL = "redis://localhost:6379"
+DEFAULT_REDIS_URL = settings.REDIS_URL
 
 
 @dataclass

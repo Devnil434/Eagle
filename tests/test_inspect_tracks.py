@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+from libs.config.settings import settings
 
 import fakeredis
 import pytest
@@ -169,7 +170,7 @@ def test_json_payload_is_machine_readable(fake_redis):
 
     encoded = json.dumps(payload)
     decoded = json.loads(encoded)
-    assert decoded["redis_url"] == "redis://localhost:6379"
+    assert decoded["redis_url"] == settings.REDIS_URL
     assert "secret" not in encoded
     assert decoded["tracks"][0]["track_id"] == 3
     assert decoded["tracks"][0]["events"][0]["event"] == "BORN"
@@ -183,7 +184,7 @@ def test_text_render_includes_detail_rows_for_single_track(fake_redis):
     output = render_text(
         summaries,
         camera_id="cam_01",
-        redis_url="redis://localhost:6379",
+        redis_url=settings.REDIS_URL,
         show_event_rows=True,
     )
 

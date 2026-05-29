@@ -1,0 +1,52 @@
+name: Phase 4 — Reasoning Tests
+
+on:
+  push:
+    paths:
+      - "services/reasoning/**"
+      - "services/memory/ring_buffer.py"
+      - "services/memory/action_classifier.py"
+      - "libs/schemas/reasoning.py"
+      - "libs/schemas/memory.py"
+      - "tests/test_reasoning.py"
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      VLM_PROVIDER: mock
+      LLM_PROVIDER: mock
+      REDIS_URL: redis://localhost:6379
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install fastapi pydantic pydantic-settings redis fakeredis \
+                      httpx numpy opencv-python-headless pytest ruff
+
+      - name: Lint
+        run: ruff check services/reasoning/ libs/schemas/reasoning.py libs/schemas/memory.py
+
+      - name: Test (no Ollama required — VLM_PROVIDER=mock)
+        run: pytest tests/test_reasoning.py -v --tb=short
+
+      - name: Coverage check
+        run: pytest tests/test_reasoning.py --cov=services/reasoning --cov-report=term-missing --cov-fail-under=70

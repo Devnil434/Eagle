@@ -8,7 +8,6 @@ Covers all acceptance criteria from Issue #44.
 import os
 import time
 import pytest
-from pathlib import Path
 from unittest.mock import patch
 
 from libs.config.zone_loader import load_zones, ZoneConfigLoader, _validate_polygon

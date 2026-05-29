@@ -4,7 +4,9 @@ All Redis tests use fakeredis — no real Redis server needed.
 """
 from __future__ import annotations
 
-import sys, os, time
+import sys
+import os
+import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
@@ -26,6 +28,7 @@ def make_event(track_id: int, frame_id: int, zone: str | None = None,
                hint: ActionHint = ActionHint.WALKING, dwell: float = 0.0) -> TrackEvent:
     return TrackEvent(
         track_id           = track_id,
+        camera_id          = "cam_01",
         frame_id           = frame_id,
         timestamp_ms       = time.time() * 1000 + frame_id * 33,
         zone               = zone,
@@ -42,7 +45,7 @@ def make_event(track_id: int, frame_id: int, zone: str | None = None,
 def test_track_event_serialises_cleanly():
     evt = make_event(1, 0)
     assert evt.track_id == 1
-    assert ActionHint.WALKING == "walking"
+    assert ActionHint.WALKING.value == "walking"
 
 
 def test_track_sequence_action_summary():
@@ -56,6 +59,40 @@ def test_track_sequence_action_summary():
         ]
     )
     assert seq.action_summary == "walking → zone_entry → lingering"
+
+def test_action_summary_empty():
+    seq = TrackSequence(track_id=99, events=[])
+    assert seq.action_summary == "unknown"
+
+def test_action_summary_single_event():
+    seq = TrackSequence(
+        track_id=100,
+        events=[make_event(100, 0, hint=ActionHint.WALKING)]
+    )
+    assert seq.action_summary == "walking"
+
+def test_action_summary_all_same():
+    seq = TrackSequence(
+        track_id=101,
+        events=[
+            make_event(101, 0, hint=ActionHint.WALKING),
+            make_event(101, 1, hint=ActionHint.WALKING),
+            make_event(101, 2, hint=ActionHint.WALKING),
+        ]
+    )
+    assert seq.action_summary == "walking"
+
+def test_action_summary_alternating():
+    seq = TrackSequence(
+        track_id=102,
+        events=[
+            make_event(102, 0, hint=ActionHint.WALKING),
+            make_event(102, 1, hint=ActionHint.ZONE_ENTRY),
+            make_event(102, 2, hint=ActionHint.WALKING),
+            make_event(102, 3, hint=ActionHint.LINGERING),
+        ]
+    )
+    assert seq.action_summary == "walking → zone_entry → walking → lingering"
 
 
 def test_track_sequence_duration():
@@ -108,7 +145,7 @@ def test_sequence_chronological_order(store):
 
 
 def test_empty_sequence_for_unknown_track(store):
-    seq = store.get_sequence(track_id=9999)
+    seq = store.get_sequence(track_id=9999 )
     assert len(seq.events) == 0
 
 
@@ -152,7 +189,7 @@ def test_get_sequence_last_n(store):
 
 def test_zone_entry_hint():
     from services.memory.action_classifier import classify_action
-    from libs.schemas.tracking import TrackedObject, TrackState, TrajectoryPoint
+    from libs.schemas.tracking import TrackedObject, TrackState
 
     obj = TrackedObject(
         track_id=1, label="person", bbox=[100,80,200,300],
@@ -181,3 +218,193 @@ def test_lingering_hint():
     registry = {2: {"restricted_door"}}   # already entered
     hint = classify_action(obj, obj, registry)
     assert hint == ActionHint.LINGERING
+
+
+def test_repeated_approach_second_entry():
+    from services.memory.action_classifier import classify_action
+    from libs.schemas.tracking import TrackedObject, TrackState
+
+    obj = TrackedObject(
+        track_id=3, label="person", bbox=[100,80,200,300],
+        confidence=0.9, center=(150,190), dwell_time_frames=1,
+        dwell_time_seconds=0.0, state=TrackState.ACTIVE,
+        zones_present=["restricted_door"],
+    )
+    registry = {}
+    counts = {}
+    cooldown = {}
+    
+    # First entry
+    hint1 = classify_action(obj, None, registry, counts, cooldown, 1000.0)
+    assert hint1 == ActionHint.ZONE_ENTRY
+    
+    # Second entry
+    hint2 = classify_action(obj, None, registry, counts, cooldown, 2000.0)
+    assert hint2 == ActionHint.REPEATED_APPROACH
+
+
+def test_repeated_approach_no_spam():
+    from services.memory.action_classifier import classify_action
+    from libs.schemas.tracking import TrackedObject, TrackState
+
+    obj = TrackedObject(
+        track_id=4, label="person", bbox=[100,80,200,300],
+        confidence=0.9, center=(150,190), dwell_time_frames=1,
+        dwell_time_seconds=0.0, state=TrackState.ACTIVE,
+        zones_present=["restricted_door"],
+    )
+    registry = {}
+    counts = {}
+    cooldown = {}
+    
+    # First entry
+    hint1 = classify_action(obj, None, registry, counts, cooldown, 1000.0)
+    assert hint1 == ActionHint.ZONE_ENTRY
+    
+    # Still inside the zone, not a new entry
+    hint_stay = classify_action(obj, obj, registry, counts, cooldown, 2000.0)
+    assert hint_stay != ActionHint.REPEATED_APPROACH
+    assert hint_stay != ActionHint.ZONE_ENTRY
+    
+    # Leave and enter again
+    hint2 = classify_action(obj, None, registry, counts, cooldown, 3000.0)
+    assert hint2 == ActionHint.REPEATED_APPROACH
+
+
+def test_repeated_approach_cooldown():
+    from services.memory.action_classifier import classify_action
+    from libs.schemas.tracking import TrackedObject, TrackState
+
+    obj = TrackedObject(
+        track_id=5, label="person", bbox=[100,80,200,300],
+        confidence=0.9, center=(150,190), dwell_time_frames=1,
+        dwell_time_seconds=0.0, state=TrackState.ACTIVE,
+        zones_present=["restricted_door"],
+    )
+    registry = {}
+    counts = {}
+    cooldown = {}
+    
+    # First entry
+    classify_action(obj, None, registry, counts, cooldown, 1000.0)
+    
+    # Second entry (triggers REPEATED_APPROACH, sets cooldown)
+    hint2 = classify_action(obj, None, registry, counts, cooldown, 2000.0)
+    assert hint2 == ActionHint.REPEATED_APPROACH
+    
+    # Third entry right after (within 10s cooldown)
+    hint3 = classify_action(obj, None, registry, counts, cooldown, 5000.0)
+    assert hint3 != ActionHint.REPEATED_APPROACH
+    
+    # Fourth entry after cooldown expires (15000 is > 10000 ms since 2000)
+    hint4 = classify_action(obj, None, registry, counts, cooldown, 15000.0)
+    assert hint4 == ActionHint.REPEATED_APPROACH
+
+
+def test_walking_hint():
+    from services.memory.action_classifier import classify_action
+    from libs.schemas.tracking import TrackedObject, TrackState
+
+    obj = TrackedObject(
+        track_id=10,
+        label="person",
+        bbox=[100, 80, 200, 300],
+        confidence=0.9,
+        center=(150, 190),
+        dwell_time_frames=1,
+        dwell_time_seconds=0.0,
+        state=TrackState.ACTIVE,
+        zones_present=[],
+    )
+
+    registry = {}
+
+    # simulate previous frame far away → movement detected
+    prev = TrackedObject(
+        track_id=10,
+        label="person",
+        bbox=[100, 80, 200, 300],
+        confidence=0.9,
+        center=(300, 400),  # big movement difference
+        dwell_time_frames=1,
+        dwell_time_seconds=0.0,
+        state=TrackState.ACTIVE,
+        zones_present=[],
+    )
+
+    hint = classify_action(obj, prev, registry)
+    assert hint == ActionHint.WALKING
+
+
+def test_standing_hint():
+    from services.memory.action_classifier import classify_action
+    from libs.schemas.tracking import TrackedObject, TrackState
+
+    obj = TrackedObject(
+        track_id=11,
+        label="person",
+        bbox=[100, 80, 200, 300],
+        confidence=0.9,
+        center=(150, 190),
+        dwell_time_frames=1,
+        dwell_time_seconds=0.0,
+        state=TrackState.ACTIVE,
+        zones_present=[],
+    )
+
+    registry = {}
+
+    prev = TrackedObject(
+        track_id=11,
+        label="person",
+        bbox=[100, 80, 200, 300],
+        confidence=0.9,
+        center=(151, 191),  # tiny movement
+        dwell_time_frames=1,
+        dwell_time_seconds=0.0,
+        state=TrackState.ACTIVE,
+        zones_present=[],
+    )
+
+    hint = classify_action(obj, prev, registry)
+    assert hint == ActionHint.STANDING
+
+
+def test_near_keypad_hint():
+    from services.memory.action_classifier import classify_action, KEYPAD_CENTER
+    from libs.schemas.tracking import TrackedObject, TrackState
+
+    obj = TrackedObject(
+        track_id=12,
+        label="person",
+        bbox=[100, 80, 200, 300],
+        confidence=0.9,
+        center=KEYPAD_CENTER,  # directly near keypad
+        dwell_time_frames=1,
+        dwell_time_seconds=0.0,
+        state=TrackState.ACTIVE,
+        zones_present=[],
+    )
+
+    registry = {}
+
+    hint = classify_action(obj, None, registry)
+    assert hint == ActionHint.NEAR_KEYPAD
+
+
+# ── reasoning_result_id tests ──────────────────────────────────────────────────
+
+def test_reasoning_result_id_absent_by_default():
+    """reasoning_result_id should default to None when no reasoning has run."""
+    evt = make_event(50, 0)
+    assert evt.reasoning_result_id is None
+
+
+def test_reasoning_result_id_present_after_set(store):
+    """reasoning_result_id should be stored and retrieved correctly."""
+    evt = make_event(51, 0, zone="restricted_door", hint=ActionHint.ZONE_ENTRY)
+    evt.reasoning_result_id = "test-alert-id-123"
+    store.store_event(evt)
+    seq = store.get_sequence(track_id=51)
+    assert seq.events[0].reasoning_result_id == "test-alert-id-123"
+

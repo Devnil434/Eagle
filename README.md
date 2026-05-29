@@ -280,6 +280,11 @@ ollama pull llava:latest
 ```bash
 python services/detection/detection.py --source data/sample_videos/sample.mp4
 ```
+### Detection Demo
+
+The following screenshot shows the object detection pipeline running with annotated bounding boxes.
+
+![Detection Output](docs/assets/detection-demo.png)
 
 ### 7. Start the backend API
 

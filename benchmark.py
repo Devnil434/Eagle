@@ -7,10 +7,11 @@ import redis
 import torch
 import cv2
 import urllib.request
+from libs.config.settings import settings
 from ultralytics import YOLO  # <-- FIX: Yeh line missing thi, ab model load ho jayega!
 
 class PipelineBenchmark:
-    def __init__(self, redis_url="redis://localhost:6379"):
+    def __init__(self, redis_url=settings.REDIS_URL):
         self.redis_url = redis_url
         self.metrics = {
             "detection_times": [],
@@ -56,7 +57,7 @@ class PipelineBenchmark:
         
         # Cross-Machine Reproducibility Check: Video download automation fallback
         if not os.path.exists(video_source) and video_source == "data/sample_videos/sample.mp4":
-            print(f"📥 Local video file nahi mili. Mentor/CI ke liye download automation start ho raha hai...")
+            print("📥 Local video file nahi mili. Mentor/CI ke liye download automation start ho raha hai...")
             try:
                 os.makedirs(os.path.dirname(video_source), exist_ok=True)
                 public_url = "https://raw.githubusercontent.com/intel-iot-devkit/sample-videos/master/bolt-detection.mp4"
@@ -229,7 +230,7 @@ class PipelineBenchmark:
 
 if __name__ == "__main__":
     int8_path = "yolov8n_int8_openvino_model" 
-    REDIS_ENV_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+    REDIS_ENV_URL = os.getenv("REDIS_URL", settings.REDIS_URL)
     
     benchrunner = PipelineBenchmark(redis_url=REDIS_ENV_URL)
     benchrunner.run_full_pipeline_benchmark(model_path=int8_path, num_frames=100)

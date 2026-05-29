@@ -8,7 +8,7 @@ import colorsys
 import numpy as np
 import cv2
 
-from libs.schemas.tracking import TrackedFrame, TrackedObject
+from libs.schemas.tracking import TrackedFrame
 
 
 def _track_color(track_id: int) -> tuple[int, int, int]:

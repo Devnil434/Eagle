@@ -12,20 +12,24 @@ from __future__ import annotations
 import math
 from libs.schemas.tracking import TrackedObject
 from libs.schemas.memory   import ActionHint
+from libs.config.settings import settings
 
 
-LINGERING_THRESHOLD_SEC  = 5.0    # seconds in zone before LINGERING
-MOVEMENT_THRESHOLD_PX    = 8.0    # pixels/frame centroid must move to be WALKING
-NEAR_KEYPAD_DIST_PX      = 80.0   # pixels from keypad centre to count as NEAR_KEYPAD
+LINGERING_THRESHOLD_SEC  = settings.lingering_threshold_sec
+MOVEMENT_THRESHOLD_PX    = settings.movement_threshold_px
+NEAR_KEYPAD_DIST_PX      = settings.near_keypad_dist_px
 
 # Approximate keypad centre (pixels) — configurable via env in production
-KEYPAD_CENTER = (600.0, 280.0)
+KEYPAD_CENTER = (settings.keypad_center_x, settings.keypad_center_y)
 
 
 def classify_action(
     obj:      TrackedObject,
     prev_obj: TrackedObject | None,
     known_zone_entries: dict[int, set[str]],   # track_id → set of zones already entered
+    zone_entry_counts: dict[int, dict[str, int]] | None = None,
+    last_repeated_approach: dict[int, float] | None = None,
+    current_time_ms: float = 0.0,
 ) -> ActionHint:
     """
     Infer an ActionHint for this frame based on tracker state and history.
@@ -42,9 +46,29 @@ def classify_action(
     if obj.zones_present:
         zone = obj.zones_present[0]
         entered = known_zone_entries.setdefault(obj.track_id, set())
-        if zone not in entered:
-            entered.add(zone)
-            return ActionHint.ZONE_ENTRY
+        
+        # Check if we just entered the zone this frame
+        just_entered = False
+        if prev_obj is None or not prev_obj.zones_present or zone not in prev_obj.zones_present:
+            just_entered = True
+
+        if just_entered:
+            if zone_entry_counts is not None:
+                counts = zone_entry_counts.setdefault(obj.track_id, {})
+                counts[zone] = counts.get(zone, 0) + 1
+                
+                if counts[zone] >= 2:
+                    if last_repeated_approach is not None:
+                        last_time = last_repeated_approach.get(obj.track_id, 0.0)
+                        if last_time == 0.0 or (current_time_ms - last_time) > 10000.0:  # 10 second cooldown
+                            last_repeated_approach[obj.track_id] = current_time_ms
+                            return ActionHint.REPEATED_APPROACH
+                    else:
+                        return ActionHint.REPEATED_APPROACH
+
+            if zone not in entered:
+                entered.add(zone)
+                return ActionHint.ZONE_ENTRY
 
     # ── Lingering ─────────────────────────────────────────────────────────
     if obj.zones_present and obj.dwell_time_seconds > LINGERING_THRESHOLD_SEC:

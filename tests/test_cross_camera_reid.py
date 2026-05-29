@@ -11,7 +11,8 @@ Run with:
 from __future__ import annotations
 
 import json
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
@@ -53,7 +54,7 @@ def _make_event(
     track_id:  int = 1,
     frame_id:  int = 0,
 ):
-    from libs.schemas.tracking import TrackLifecycleEvent, TrackState
+    from libs.schemas.tracking import TrackLifecycleEvent
     return TrackLifecycleEvent(
         event              = event_type,
         track_id           = track_id,

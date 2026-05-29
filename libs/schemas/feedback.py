@@ -1,6 +1,5 @@
 from typing import List
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from pydantic.json import pydantic_encoder
 from datetime import datetime
 import base64
 

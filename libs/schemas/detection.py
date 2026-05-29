@@ -35,7 +35,8 @@ class DetectionSchema(BaseModel):
     bbox: BoundingBox = Field(..., description="Bounding box coordinates")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence")
     class_id: Optional[int] = Field(None, description="COCO class ID")
-
+    center: tuple[float, float] = Field(..., description="Center coordinates (cx, cy)")
+    zones_present: list[str] = Field(default_factory=list, description="Zones this detection is in")
 
 class DetectionFrameSchema(BaseModel):
     """Collection of detections for a single frame."""

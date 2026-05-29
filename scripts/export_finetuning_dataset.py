@@ -5,9 +5,11 @@ import argparse
 import logging
 import sys
 import os
+from Eagle.libs.config import settings
 from redis import asyncio as aioredis
 from apps.backend.services.feedback_collector import FeedbackCollector
 from services.data_collection.exporter import LLaVAExporter
+from libs.config.settings import settings
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -63,7 +65,7 @@ def parse_args():
     
     parser.add_argument(
         "--redis-url",
-        default=os.getenv("REDIS_URL", "redis://localhost:6379"),
+        default=os.getenv("REDIS_URL", settings.REDIS_URL),
         help="Redis connection URL (default: env REDIS_URL or localhost:6379)"
     )
     parser.add_argument(

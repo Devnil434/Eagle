@@ -18,6 +18,7 @@ import logging
 import time
 from pathlib import Path
 
+from libs.config import settings
 import cv2
 import numpy as np
 from deep_sort_realtime.deepsort_tracker import DeepSort
@@ -70,11 +71,25 @@ class Tracker:
         camera_id: str = "cam_01",
         event_logger: TrackEventLogger | None = None,
         reid_similarity_threshold: float = 0.85,
+        max_interpolation_gap: int = 10,  # Added with a sensible default
     ) -> None:
+        """Initialize the tracker with DeepSort hyperparameters and interpolation constraints.
+
+        Args:
+            fps: Frame rate of the video source.
+            max_age: Maximum frames to keep a lost track alive before dropping it.
+            n_init: Number of consecutive frames needed to confirm a track.
+            max_cosine_distance: Maximum threshold for visual appearance feature matching.
+            camera_id: Unique identifier string for the source camera.
+            event_logger: Optional logger interface for tracking state lifecycle events.
+            reid_similarity_threshold: Minimum confidence needed to reconnect an ID via ReID.
+            max_interpolation_gap: Maximum frame gap size allowed to fill missing trajectories.
+        """
         self.fps = fps
         self.camera_id = camera_id
         self.max_age = max_age  # NEW
         self.REID_SIMILARITY_THRESHOLD = reid_similarity_threshold
+        self.max_interpolation_gap = max_interpolation_gap  # Fixed missing attribute
 
         self._tracker = DeepSort(
             max_age=max_age,
@@ -172,15 +187,62 @@ class Tracker:
                 self._emit_lifecycle(TrackState.BORN, tid, zones, 0.0)
                 logger.info(f"Track BORN: #{tid} in zones={zones}")
 
-            # ── Dwell time ────────────────────────────────────────────────
+            # ── Base Setup & Gap Calculation ──────────────────────────────
             prev = self._active_tracks.get(tid)
-            dwell_frames = (prev.dwell_time_frames + 1) if prev else 1
+            prev_traj = prev.trajectory if prev else []
+            
+            # Compute gap_frames early so both Dwell Time and Trajectory can use it
+            gap_frames = max(0, self._frame_id - prev.last_seen_frame - 1) if prev is not None else 0
+
+            # ── Dwell time ────────────────────────────────────────────────
+            if prev:
+                # Add historic frames, the current frame, and the occlusion gap
+                dwell_frames = prev.dwell_time_frames + 1 + gap_frames
+            else:
+                dwell_frames = 1
+            
             dwell_secs = dwell_frames / self.fps
 
             # ── Trajectory ────────────────────────────────────────────────
-            prev_traj = prev.trajectory if prev else []
+            interpolated_points = []
+            max_gap = self.max_interpolation_gap  # <-- Replaced self.config string access
+
+            if prev is not None and 0 < gap_frames <= max_gap:
+                # Added guard condition below to prevent IndexError crashes
+                if prev.trajectory:
+                    last_pos = {"x": prev.trajectory[-1].x, "y": prev.trajectory[-1].y}
+                else:
+                    last_pos = {"x": cx, "y": cy}  # Fallback to current center coordinates
+                
+                new_pos = {"x": cx, "y": cy}
+                
+                # Check if previous data contains w and h bounding box metrics
+                if hasattr(prev, 'bbox') and len(prev.bbox) == 4:
+                    # Calculate old width and height from bbox: [x1, y1, x2, y2]
+                    last_pos["w"] = prev.bbox[2] - prev.bbox[0]
+                    last_pos["h"] = prev.bbox[3] - prev.bbox[1]
+                    # Current width and height
+                    new_pos["w"] = x2 - x1
+                    new_pos["h"] = y2 - y1
+                
+                # Synthesize intermediate points and wrap them into TrajectoryPoint instances
+                interpolated_points = [
+                    TrajectoryPoint(
+                        x=p["x"],
+                        y=p["y"],
+                        frame_id=p["frame_id"],
+                        interpolated=True,
+                        w=p.get("w"),
+                        h=p.get("h")
+                    )
+                    for p in _interpolate_trajectory(last_pos, new_pos, gap_frames, prev.last_seen_frame + 1)
+                ] 
+            
+            # Generate the current frame real point
             new_point = TrajectoryPoint(x=cx, y=cy, frame_id=self._frame_id)
-            trajectory = (prev_traj + [new_point])[-self.MAX_TRAJECTORY_LEN :]
+            
+            # Merge old history, calculated mid-gap points, and current point cleanly
+            trajectory = (prev_traj + interpolated_points + [new_point])[-self.MAX_TRAJECTORY_LEN :]
 
             obj = TrackedObject(
                 track_id=tid,
@@ -240,6 +302,7 @@ class Tracker:
                     del self._active_tracks[tid]
                     self._active_embeddings.pop(tid, None)
                     logger.info(f"Track DEAD: #{tid} after {prev_obj.dwell_time_seconds:.1f}s")
+                    
         # ── Cleanup expired ReID embeddings ──────────────────
         expired_ids = [
             tid
@@ -313,7 +376,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Phase 2 — Tracking demo")
     parser.add_argument("--source", default="0")
-    parser.add_argument("--model", default="yolov8n.pt")
+    parser.add_argument("--model", default=settings.detector_model, help="YOLO model name")
     parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
@@ -359,6 +422,37 @@ def main() -> None:
         writer.release()
     cv2.destroyAllWindows()
 
+def _interpolate_trajectory(
+    last_pos: dict, 
+    new_pos: dict, 
+    gap_frames: int, 
+    start_frame_id: int
+) -> list:
+    """Fills trajectory gaps using linear interpolation for temporary missed detections."""
+    if gap_frames <= 0:
+        return []
+
+    interpolated_points = []
+    total_steps = gap_frames + 1
+    
+    x_step = (new_pos['x'] - last_pos['x']) / total_steps
+    y_step = (new_pos['y'] - last_pos['y']) / total_steps
+    
+    for i in range(1, gap_frames + 1):
+        point = {
+            "frame_id": start_frame_id + (i - 1),
+            "x": round(last_pos['x'] + (x_step * i), 2),
+            "y": round(last_pos['y'] + (y_step * i), 2),
+            "interpolated": True
+        }
+        
+        if all(k in last_pos and k in new_pos for k in ('w', 'h')):
+            point['w'] = round(last_pos['w'] + (((new_pos['w'] - last_pos['w']) / total_steps) * i), 2)
+            point['h'] = round(last_pos['h'] + (((new_pos['h'] - last_pos['h']) / total_steps) * i), 2)
+            
+        interpolated_points.append(point)
+        
+    return interpolated_points
 
 if __name__ == "__main__":
     main()

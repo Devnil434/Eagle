@@ -1,5 +1,6 @@
 import os
 from ultralytics import YOLO
+from libs.config.settings import settings
 
 def drone_optimized_quantization():
     """
@@ -23,7 +24,7 @@ def drone_optimized_quantization():
         drone_data_yaml = f"{dataset.location}/data.yaml"
 
     print("⚡ Initiating OpenVINO INT8 Calibration Export process...")
-    model = YOLO("yolov8n.pt")
+    model = YOLO(settings.detector_model)
     
     path = model.export(
         format="openvino", 
