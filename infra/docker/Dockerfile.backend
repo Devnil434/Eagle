@@ -3,19 +3,8 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Copy requirements from backend app
-COPY apps/backend/requirements.txt ./requirements-backend.txt
-COPY services/reasoning/requirements.txt ./requirements-reasoning.txt
-COPY services/memory/requirements.txt ./requirements-memory.txt
-COPY services/detection/requirements.txt ./requirements-detection.txt
-COPY services/tracking/requirements.txt ./requirements-tracking.txt
-
-# Install all dependencies
-RUN pip install --no-cache-dir \
-    -r requirements-backend.txt \
-    -r requirements-reasoning.txt \
-    -r requirements-memory.txt \
-    -r requirements-detection.txt \
-    -r requirements-tracking.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy everything from context (root)
 COPY . .
