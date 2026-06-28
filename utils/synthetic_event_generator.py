@@ -18,7 +18,11 @@ def generate_event(
     event_type: Optional[str] = None,
     person_id: Optional[int] = None,
     timestamp: Optional[datetime] = None,
+    seed: Optional[int] = None,
 ) -> Dict[str, Any]:
+    if seed is not None:
+        random.seed(seed)
+
     if event_type is None:
         event_type = random.choice(EVENT_TYPES)
 
@@ -85,6 +89,9 @@ def generate_events(
 ) -> List[Dict[str, Any]]:
     if count <= 0:
         raise ValueError("count must be greater than 0")
+
+    if interval_seconds <= 0:
+        raise ValueError("interval_seconds must be greater than 0")
 
     if start_time is None:
         start_time = datetime.now(timezone.utc)
