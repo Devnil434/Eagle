@@ -14,6 +14,26 @@ import pytest
 from libs.config.settings import Settings
 
 
+@pytest.fixture(autouse=True)
+def clean_settings_env(monkeypatch):
+    """Ensure that the local .env file and existing environment variables
+    do not pollute the Settings unit tests.
+    """
+    # Prevent loading of .env file
+    original_init = Settings.__init__
+    def patched_init(self, *args, **kwargs):
+        kwargs.setdefault("_env_file", None)
+        original_init(self, *args, **kwargs)
+    monkeypatch.setattr(Settings, "__init__", patched_init)
+
+    # Clear environment variables corresponding to Settings fields
+    for field in Settings.model_fields:
+        monkeypatch.delenv(field.upper(), raising=False)
+
+
+
+
+
 # ── Default values ────────────────────────────────────────────────────────────
 
 class TestDefaults:

@@ -4,7 +4,7 @@ These are the contracts between the detection service and tracking.
 """
 
 from __future__ import annotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 import time
 
@@ -35,8 +35,14 @@ class DetectionSchema(BaseModel):
     bbox: BoundingBox = Field(..., description="Bounding box coordinates")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence")
     class_id: Optional[int] = Field(None, description="COCO class ID")
-    center: tuple[float, float] = Field(..., description="Center coordinates (cx, cy)")
+    center: Optional[tuple[float, float]] = Field(None, description="Center coordinates (cx, cy)")
     zones_present: list[str] = Field(default_factory=list, description="Zones this detection is in")
+
+    @model_validator(mode="after")
+    def populate_center(self) -> DetectionSchema:
+        if self.center is None and self.bbox is not None:
+            self.center = self.bbox.center
+        return self
 
 class DetectionFrameSchema(BaseModel):
     """Collection of detections for a single frame."""

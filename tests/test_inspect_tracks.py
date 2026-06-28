@@ -170,7 +170,7 @@ def test_json_payload_is_machine_readable(fake_redis):
 
     encoded = json.dumps(payload)
     decoded = json.loads(encoded)
-    assert decoded["redis_url"] == settings.redis_url
+    assert decoded["redis_url"] == "redis://localhost:6379"
     assert "secret" not in encoded
     assert decoded["tracks"][0]["track_id"] == 3
     assert decoded["tracks"][0]["events"][0]["event"] == "BORN"

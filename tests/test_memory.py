@@ -60,6 +60,7 @@ def test_memory_import_does_not_require_cv2(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", guarded_import)
+    monkeypatch.delitem(sys.modules, "cv2", raising=False)
     monkeypatch.delitem(sys.modules, "services.tracking", raising=False)
     monkeypatch.delitem(sys.modules, "services.tracking.tracker", raising=False)
     monkeypatch.delitem(sys.modules, "services.memory.memory", raising=False)
