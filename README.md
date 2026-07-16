@@ -7,7 +7,7 @@
 [![GSSoC 2026](https://img.shields.io/badge/GSSoC-2026-orange?style=for-the-badge&logo=github)](https://gssoc.girlscript.tech)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Next.js-14+-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19+-blue?style=for-the-badge&logo=react)](https://react.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge)](CONTRIBUTING.md)
 
@@ -78,7 +78,7 @@ The architecture covers:
 - Detection → Tracking → Temporal Memory → Reasoning pipeline
 - Event-triggered VLM execution
 - Redis memory design
-- FastAPI + Next.js integration
+- FastAPI + React integration
 - Full component and data-flow reference
 
 ### Service Breakdown
@@ -91,7 +91,7 @@ The architecture covers:
 | **VLM Layer** | LLaVA-Next / Qwen-VL | Generate natural language frame descriptions on event trigger |
 | **LLM Reasoning** | Mixtral / GPT-4o / Gemini | Classify intent from caption sequence; output label + reason |
 | **Backend API** | FastAPI + Celery | Async REST API; task queue for slow VLM/LLM calls |
-| **Frontend** | Next.js 14 + TypeScript | Live video, bounding box overlay, alert panel, timeline |
+| **Frontend** | React 19 + TypeScript | Live video, bounding box overlay, alert panel, timeline |
 
 ---
 
@@ -106,7 +106,7 @@ The architecture covers:
 | LLM Reasoning | Mixtral-8x7B / GPT-4o | Configurable per cost/quality requirements |
 | Backend | FastAPI + Uvicorn | Async, auto-docs, Pydantic, fastest Python API |
 | Task Queue | Celery + Redis | Decouples slow VLM/LLM from real-time pipeline |
-| Frontend | Next.js 14 + TypeScript | App Router, SSE, type safety, Tailwind |
+| Frontend | React 19 + Vite | Vite dev server, SSE, type safety, Tailwind |
 | Containers | Docker + docker-compose | One-command setup for all contributors |
 | CI/CD | GitHub Actions | Free for open source; native GitHub integration |
 | Optimization | ONNX Runtime (INT8) | 2–4× speed-up without retraining |
@@ -321,7 +321,7 @@ Request: { "alert_id": "alert_001", "correct": false, "note": "Normal employee" 
 | Week 4 | VLM | LLaVA-Next producing frame captions on event trigger |
 | Week 5 | LLM Reasoning | Caption sequence → Suspicious/Normal + explanation |
 | Week 6 | API | FastAPI live; all endpoints tested; Docker working |
-| Week 7 | Frontend | Next.js dashboard with live video, alerts, timeline |
+| Week 7 | Frontend | React dashboard with live video, alerts, timeline |
 | Week 8 | Launch | Optimized, documented, CI live, 20+ GSSoC issues |
 
 **Post-GSSoC (v2.0+):**

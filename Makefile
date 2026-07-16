@@ -22,7 +22,7 @@ install:
 # --------------------------------------------------------------------------
 install-frontend:
 	@echo "Installing frontend dependencies..."
-	cd apps/frontend && npm install
+	cd apps/dashboard && npm install
 	@echo "Done: frontend dependencies installed."
 
 # --------------------------------------------------------------------------

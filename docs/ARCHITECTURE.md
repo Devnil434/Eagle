@@ -1,6 +1,6 @@
 # Eagle Architecture Reference
 
-Eagle is an event-driven surveillance reasoning pipeline that converts raw video frames into natural-language risk assessments. Frames enter the detection layer (`services/detection/detector.py`), tracked entities are persisted across time (`services/tracking/tracker.py`), recent events are stored in Redis (`services/memory/memory.py`), and only meaningful behavioral changes trigger multimodal reasoning (`services/reasoning/vlm.py` + `services/reasoning/llm.py`). The final output is a structured alert served through the FastAPI backend (`apps/backend/main.py`) and visualized in the Next.js dashboard (`apps/frontend/`).
+Eagle is an event-driven surveillance reasoning pipeline that converts raw video frames into natural-language risk assessments. Frames enter the detection layer (`services/detection/detector.py`), tracked entities are persisted across time (`services/tracking/tracker.py`), recent events are stored in Redis (`services/memory/memory.py`), and only meaningful behavioral changes trigger multimodal reasoning (`services/reasoning/vlm.py` + `services/reasoning/llm.py`). The final output is a structured alert served through the FastAPI backend (`apps/backend/main.py`) and visualized in the React dashboard (`apps/dashboard/`).
 
 ---
 
@@ -14,7 +14,7 @@ Eagle is an event-driven surveillance reasoning pipeline that converts raw video
 | VLM Captioning | LLaVA-Next / Qwen-VL | Triggered frame sequence | Natural language captions |
 | LLM Reasoning | Mixtral / GPT-4o / Gemini | Caption sequence + policies | `Alert(label, confidence, reason)` |
 | Backend API | FastAPI + Celery | REST requests | JSON API responses |
-| Frontend | Next.js 14 | SSE / REST payloads | Live dashboard + alert timeline |
+| Frontend | React 19 + Vite | SSE / REST payloads | Live dashboard + alert timeline |
 
 ---
 
@@ -38,4 +38,4 @@ F --> G[LLM Reasoning<br/>services/reasoning/llm.py]
 
 G --> H[FastAPI Backend<br/>apps/backend/main.py]
 
-H --> I[Next.js Dashboard<br/>apps/frontend]
+H --> I[React Dashboard<br/>apps/dashboard]
