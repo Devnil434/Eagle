@@ -5,7 +5,7 @@ from fastapi import APIRouter
 
 logger = logging.getLogger("eagle.snapshot")
 
-router = APIRouter()
+router = APIRouter(prefix="/snapshot", tags=["snapshot"])
 
 
 @router.get("", tags=["snapshot"])
