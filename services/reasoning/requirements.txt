@@ -1,0 +1,9 @@
+numpy
+opencv-python
+httpx
+pydantic
+transformers
+accelerate
+bitsandbytes
+fakeredis
+pytest

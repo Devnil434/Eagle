@@ -1,0 +1,17 @@
+﻿camera_id: cam_01
+
+zones:
+  - name: restricted_door
+    polygon: [[540,200],[740,200],[740,480],[540,480]]
+    alert_on_entry: true
+    color_hex: "#ef4444"
+
+  - name: keypad_area
+    polygon: [[620,280],[720,280],[720,420],[620,420]]
+    alert_on_entry: true
+    color_hex: "#f97316"
+
+  - name: safe_corridor
+    polygon: [[0,0],[300,0],[300,480],[0,480]]
+    alert_on_entry: false
+    color_hex: "#22c55e"

@@ -1,56 +1,83 @@
 """
-zones.py — Define restricted polygon regions for the scene.
+services/detection/zones.py
 
-A zone is a named polygon defined as a list of (x, y) pixel coordinates.
-Points must be in clockwise or counter-clockwise order.
+Zone definitions are now loaded from config/zones.yaml via ZoneConfigLoader.
+Set ZONES_CONFIG_PATH env var to override the default config location.
 """
-from dataclasses import dataclass, field
+
+import logging
+import cv2
 import numpy as np
+from libs.config.zone_loader import ZoneConfigLoader
+from typing import List, Tuple
 
 
-@dataclass
 class Zone:
-    name: str
-    polygon: list[tuple[int, int]]  # list of (x, y) corner points
-    alert_on_entry: bool = True
-    color_bgr: tuple[int, int, int] = (0, 0, 255)  # red by default
+    """Lightweight wrapper around zone dicts from ZoneConfigLoader."""
+
+    def __init__(self, data: dict) -> None:
+        self.name: str = data.get("name")
+        self.polygon: List[Tuple[float, float]] = data.get("polygon", [])
+        self.alert_on_entry: bool = data.get("alert_on_entry", False)
+        self.color_hex: str = data.get("color_hex", "#FF0000")
 
     def as_array(self) -> np.ndarray:
-        """Return polygon as numpy array for cv2.pointPolygonTest."""
         return np.array(self.polygon, dtype=np.int32)
 
+    @property
+    def color_bgr(self) -> Tuple[int, int, int]:
+        # hex #RRGGBB -> BGR tuple for OpenCV
+        h = self.color_hex.lstrip("#")
+        r = int(h[0:2], 16)
+        g = int(h[2:4], 16)
+        b = int(h[4:6], 16)
+        return (b, g, r)
 
-# ─── Default zones for a sample indoor corridor scene ───────────────────────
-DEFAULT_ZONES: list[Zone] = [
-    Zone(
-        name="restricted_door",
-        polygon=[(540, 200), (740, 200), (740, 480), (540, 480)],
-        alert_on_entry=True,
-        color_bgr=(0, 0, 255),      # red
-    ),
-    Zone(
-        name="keypad_area",
-        polygon=[(620, 280), (720, 280), (720, 420), (620, 420)],
-        alert_on_entry=True,
-        color_bgr=(0, 165, 255),    # orange
-    ),
-    Zone(
-        name="safe_corridor",
-        polygon=[(0, 0), (300, 0), (300, 480), (0, 480)],
-        alert_on_entry=False,
-        color_bgr=(0, 255, 0),      # green
-    ),
-]
+    def contains_point(self, x: float, y: float) -> bool:
+        # Ray casting algorithm for point-in-polygon
+        pts = self.polygon
+        inside = False
+        n = len(pts)
+        j = n - 1
+        for i in range(n):
+            xi, yi = pts[i]
+            xj, yj = pts[j]
+            intersect = ((yi > y) != (yj > y)) and (
+                x < (xj - xi) * (y - yi) / (yj - yi + 1e-12) + xi
+            )
+            if intersect:
+                inside = not inside
+            j = i
+        return inside
+logger = logging.getLogger(__name__)
+
+# Module-level singleton loader — starts hot-reload background thread
+_loader = ZoneConfigLoader()
+_loader.start()
 
 
-def point_in_zone(x: float, y: float, zone: Zone) -> bool:
-    """Return True if point (x, y) is inside the zone polygon."""
-    import cv2
-    result = cv2.pointPolygonTest(zone.as_array(), (float(x), float(y)), False)
-    return result >= 0
+def get_zones() -> list["Zone"]:
+    """
+    Return the current list of Zone objects loaded from YAML.
+    """
+    return [Zone(z) for z in _loader.get_zones()]
 
 
-def get_zones_for_point(x: float, y: float, zones: list[Zone] | None = None) -> list[Zone]:
-    """Return all zones that contain point (x, y)."""
-    zones = zones or DEFAULT_ZONES
-    return [z for z in zones if point_in_zone(x, y, z)]
+def get_camera_id() -> str | None:
+    """Return the camera_id from the active zone config."""
+    return _loader.get_camera_id()
+
+
+# Alias for legacy support in detection.py
+DEFAULT_ZONES = get_zones()
+# Convenience alias for code that previously referenced DEFAULT_ZONES directly
+DEFAULT_ZONES = get_zones()
+
+
+def get_zones_for_point(x: float, y: float) -> List[Zone]:
+    """Return list of Zone objects that contain the point (x, y).
+
+    Coordinates are in image pixel space (x horizontal, y vertical).
+    """
+    zones = get_zones()
+    return [z for z in zones if z.contains_point(x, y)]

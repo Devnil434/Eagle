@@ -7,7 +7,7 @@
 [![GSSoC 2026](https://img.shields.io/badge/GSSoC-2026-orange?style=for-the-badge&logo=github)](https://gssoc.girlscript.tech)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
-[![Next.js](https://img.shields.io/badge/Next.js-14+-black?style=for-the-badge&logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19+-blue?style=for-the-badge&logo=react)](https://react.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge)](CONTRIBUTING.md)
 
@@ -71,51 +71,15 @@ It uses a multimodal AI pipeline to produce:
 
 ## 🏗️ System Architecture
 
-```
-┌─────────────────────────────────────┐
-│        CAMERA STREAM / VIDEO        │
-└──────────────────┬──────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│   DETECTION SERVICE  (YOLOv8/v9)   │  services/detection/
-│   Person, Door, Keypad, Bag ...    │
-└──────────────────┬──────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│   TRACKING SERVICE  (ByteTrack)    │  services/tracking/
-│   Person ID: #1, Trajectory, Age  │
-└──────────────────┬──────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│   TEMPORAL MEMORY  (Redis Buffer)  │  services/memory/
-│   Last 50 events per track_id      │
-└──────────────────┬──────────────────┘
-                   │
-         ⚡ Event Trigger
-         (only on zone entry, not every frame)
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│   VLM CAPTIONING  (LLaVA-Next)     │  services/reasoning/
-│   "Describe what person is doing"  │
-└──────────────────┬──────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│   LLM REASONING LAYER              │
-│   Label: Suspicious / Normal       │
-│   Reason: Natural language text    │
-└──────────────────┬──────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│   FASTAPI BACKEND  +  NEXT.JS UI   │  apps/
-│   REST API  |  Real-time Dashboard │
-└─────────────────────────────────────┘
-```
+Detailed pipeline documentation is available in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+The architecture covers:
+
+- Detection → Tracking → Temporal Memory → Reasoning pipeline
+- Event-triggered VLM execution
+- Redis memory design
+- FastAPI + React integration
+- Full component and data-flow reference
 
 ### Service Breakdown
 
@@ -127,7 +91,7 @@ It uses a multimodal AI pipeline to produce:
 | **VLM Layer** | LLaVA-Next / Qwen-VL | Generate natural language frame descriptions on event trigger |
 | **LLM Reasoning** | Mixtral / GPT-4o / Gemini | Classify intent from caption sequence; output label + reason |
 | **Backend API** | FastAPI + Celery | Async REST API; task queue for slow VLM/LLM calls |
-| **Frontend** | Next.js 14 + TypeScript | Live video, bounding box overlay, alert panel, timeline |
+| **Frontend** | React 19 + TypeScript | Live video, bounding box overlay, alert panel, timeline |
 
 ---
 
@@ -142,7 +106,7 @@ It uses a multimodal AI pipeline to produce:
 | LLM Reasoning | Mixtral-8x7B / GPT-4o | Configurable per cost/quality requirements |
 | Backend | FastAPI + Uvicorn | Async, auto-docs, Pydantic, fastest Python API |
 | Task Queue | Celery + Redis | Decouples slow VLM/LLM from real-time pipeline |
-| Frontend | Next.js 14 + TypeScript | App Router, SSE, type safety, Tailwind |
+| Frontend | React 19 + Vite | Vite dev server, SSE, type safety, Tailwind |
 | Containers | Docker + docker-compose | One-command setup for all contributors |
 | CI/CD | GitHub Actions | Free for open source; native GitHub integration |
 | Optimization | ONNX Runtime (INT8) | 2–4× speed-up without retraining |
@@ -159,12 +123,12 @@ Eagle/
 │   │   ├── main.py
 │   │   ├── routes/
 │   │   └── tasks.py            # Celery async tasks
-│   └── frontend/               # Next.js dashboard
-│       ├── components/
-│       │   ├── VideoFeed.tsx
-│       │   ├── AlertPanel.tsx
-│       │   └── Timeline.tsx
-│       └── app/
+│   └── dashboard/              # React 19 + Vite dashboard
+│       ├── src/
+│       │   └── components/
+│       │       └── ZoneEditor.tsx
+│       ├── index.html
+│       └── vite.config.js
 │
 ├── services/
 │   ├── detection/
@@ -211,6 +175,36 @@ Eagle/
 - Docker + Docker Compose
 - [Ollama](https://ollama.ai) (for local LLaVA-Next)
 
+
+## ⚡ Quick Start (with Make)
+
+> All commands are available via `make`. Run `make help` for the full list.
+
+```bash
+make install   # install dependencies
+make up        # start services
+make demo      # run the demo
+```
+
+## 🛠 Developer Commands
+
+| Command | Description |
+|---|---|
+| `make install` | Install backend dependencies |
+| `make install-frontend` | Install npm dependencies in apps/dashboard |
+| `make setup` | Full dev setup (backend + frontend) |
+| `make test` | Run pytest suite |
+| `make lint` | Run ruff and black checks |
+| `make coverage` | Run tests with coverage |
+| `make up` | Start docker services |
+| `make down` | Stop docker services |
+| `make demo` | Run detection demo |
+| `make clean` | Remove temporary/cache files |
+| `make help` | Print usage summary |
+
+
+## Manual Setup
+
 ### 1. Clone the repository
 
 ```bash
@@ -248,8 +242,13 @@ ollama pull llava:latest
 ### 6. Run detection on a sample video
 
 ```bash
-python services/detection/detector.py --source data/sample_videos/sample.mp4
+python -m services.detection.detection --source data/sample_videos/sample.mp4
 ```
+### Detection Demo
+
+The following screenshot shows the object detection pipeline running with annotated bounding boxes.
+
+![Detection Output](docs/assets/detection-demo.png)
 
 ### 7. Start the backend API
 
@@ -263,12 +262,12 @@ API docs available at: `http://localhost:8000/docs`
 ### 8. Start the frontend
 
 ```bash
-cd apps/frontend
+cd apps/dashboard
 npm install
 npm run dev
 ```
 
-Dashboard at: `http://localhost:3000`
+Dashboard at: `http://localhost:5173`
 
 ---
 
@@ -322,7 +321,7 @@ Request: { "alert_id": "alert_001", "correct": false, "note": "Normal employee" 
 | Week 4 | VLM | LLaVA-Next producing frame captions on event trigger |
 | Week 5 | LLM Reasoning | Caption sequence → Suspicious/Normal + explanation |
 | Week 6 | API | FastAPI live; all endpoints tested; Docker working |
-| Week 7 | Frontend | Next.js dashboard with live video, alerts, timeline |
+| Week 7 | Frontend | React dashboard with live video, alerts, timeline |
 | Week 8 | Launch | Optimized, documented, CI live, 20+ GSSoC issues |
 
 **Post-GSSoC (v2.0+):**
@@ -350,6 +349,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 | Add Qwen-VL as alternative VLM backend | 🟡 Intermediate | `AI/ML` |
 | Implement risk scoring algorithm | 🔴 Advanced | `AI/ML` |
 | Add ONNX INT8 quantization for YOLO | 🔴 Advanced | `optimization` |
+
+### 👥 Contributors
+
+Thanks to all contributors ❤️
+
+[![Contributors](https://contrib.rocks/image?repo=Devnil434/Eagle)](https://github.com/Devnil434/Eagle/graphs/contributors)
 
 ---
 

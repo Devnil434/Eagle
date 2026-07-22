@@ -39,7 +39,7 @@ import json
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
@@ -228,7 +228,13 @@ class CrossCameraReID:
         """Return all live embedding records that belong to other cameras."""
         pattern = "embed:*"
         # KEYS is fine for small deployments; use SCAN for production scale
-        all_keys: list[bytes] = self._r.keys(pattern)
+        all_keys = []
+        cursor = 0
+        while True:
+            cursor, batch = self._r.scan(cursor, match=pattern, count=100)
+            all_keys.extend(batch)
+            if cursor == 0:
+                break
         records: list[EmbeddingRecord] = []
 
         for raw_key in all_keys:

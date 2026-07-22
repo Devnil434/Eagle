@@ -51,6 +51,9 @@ class TrackResponse(BaseModel):
     zones_present:       list[str]         = Field(default_factory=list)
     born_frame:          Optional[int]     = None
     last_seen_frame:     Optional[int]     = None
+    current_action:      Optional[str]     = Field(None, description="Temporal action label")
+    action_confidence:   Optional[float]   = None
+    action_source:       Optional[str]     = Field(None, description="heuristic | model")
 
 
 class IdentityResponse(BaseModel):
@@ -235,4 +238,7 @@ def _record_to_response(data: dict) -> TrackResponse:
         zones_present       = data.get("zones_present", []),
         born_frame          = data.get("born_frame"),
         last_seen_frame     = data.get("last_seen_frame"),
+        current_action      = data.get("current_action"),
+        action_confidence   = data.get("action_confidence"),
+        action_source       = data.get("action_source"),
     )

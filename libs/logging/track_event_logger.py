@@ -32,13 +32,15 @@ class TrackEventLogger:
     Parameters
     ----------
     log_path : Path
-        Destination JSONL file.  Defaults to ``data/logs/tracks.jsonl``.
+        Destination JSONL file.  Defaults to the ``LIFECYCLE_LOG_PATH``
+        environment variable, falling back to ``data/logs/tracks.jsonl``.
     """
 
-    DEFAULT_LOG_PATH = Path("data/logs/tracks.jsonl")
-
     def __init__(self, log_path: Path | None = None) -> None:
-        self.log_path = log_path or self.DEFAULT_LOG_PATH
+        if log_path is None:
+            from libs.config.settings import settings
+            log_path = Path(settings.lifecycle_log_path)
+        self.log_path = log_path
         os.makedirs(self.log_path.parent, exist_ok=True)
 
     # ── Public API ──────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ These are the contracts between the tracking service and everything downstream.
 from __future__ import annotations
 from pydantic import BaseModel, Field
 from enum import Enum
-
+from typing import Optional
 
 class TrackState(str, Enum):
     BORN     = "BORN"      # first frame this track_id appeared
@@ -13,12 +13,14 @@ class TrackState(str, Enum):
     LOST     = "LOST"      # not seen for up to max_age frames
     DEAD     = "DEAD"      # expired — will not be reassigned
 
-
 class TrajectoryPoint(BaseModel):
+    """A single spatial-temporal coordinate snapshot representing an object's historical location."""
     x: float
     y: float
     frame_id: int
-
+    interpolated: bool = False
+    w: Optional[float] = None
+    h: Optional[float] = None
 
 class TrackedObject(BaseModel):
     track_id: int                          = Field(..., description="Persistent ID across frames")
@@ -32,6 +34,7 @@ class TrackedObject(BaseModel):
     trajectory: list[TrajectoryPoint]      = Field(default_factory=list)
     zones_present: list[str]               = Field(default_factory=list)
     last_seen_frame: int                   = 0
+    is_anomalous: bool                     = Field(False, description="True when dwell exceeds adaptive zone baseline")
 
 
 class TrackedFrame(BaseModel):

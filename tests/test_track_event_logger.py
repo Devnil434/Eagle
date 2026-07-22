@@ -17,7 +17,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from pathlib import Path
 
-import pytest
 
 from libs.schemas.tracking import TrackLifecycleEvent, TrackState
 from libs.logging.track_event_logger import TrackEventLogger
