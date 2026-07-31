@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 
 import asyncio
+import datetime
 import logging
 import time
 import uuid
@@ -27,9 +28,10 @@ import numpy as np
 from libs.schemas.memory   import ActionHint, TrackSequence
 from libs.schemas.reasoning import ReasoningResult, GroundingResult
 from services.memory.ring_buffer import MemoryStore
-from services.reasoning.dedup     import AlertDeduplicator
-from services.reasoning.vlm       import BaseCaptioner, get_captioner
-from services.reasoning.llm       import BaseLLMReasoner, get_reasoner
+from services.reasoning.dedup         import AlertDeduplicator
+from services.reasoning.vlm           import BaseCaptioner, get_captioner
+from services.reasoning.llm           import BaseLLMReasoner, get_reasoner
+from services.reasoning.risk_scoring  import AdaptiveRiskScorer
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +41,7 @@ GROUNDING_ENABLED = __import__("os").getenv("GROUNDING_ENABLED", "true").lower()
 # Global asyncio queue consumed by FastAPI SSE endpoint
 alert_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
 
-# Severity weights
-_W = dict(
-    confidence       = 0.50,
-    long_dwell       = 0.20,
-    repeated_approach = 0.20,
-    high_tier_bonus  = 0.10,
-)
+
 
 
 class ReasoningPipeline:
@@ -63,6 +59,7 @@ class ReasoningPipeline:
         reasoner:     Optional[BaseLLMReasoner] = None,
         store:        Optional[MemoryStore]     = None,
         deduplicator: Optional[AlertDeduplicator] = None,
+        risk_scorer:  Optional[AdaptiveRiskScorer] = None,
     ) -> None:
         self._captioner    = captioner    or get_captioner()
         self._reasoner     = reasoner     or get_reasoner()
@@ -70,6 +67,7 @@ class ReasoningPipeline:
         self._deduplicator = deduplicator or AlertDeduplicator(
             redis_client=self._store._r
         )
+        self._risk_scorer  = risk_scorer  or AdaptiveRiskScorer()
 
     # ── Public ───────────────────────────────────────────────────────────────
 
@@ -215,21 +213,46 @@ class ReasoningPipeline:
                 )
         return GroundingResult(grounded=True, checked_caption=caption)
 
-    # ── Severity scoring ──────────────────────────────────────────────────────
+    # ── Severity scoring (powered by AdaptiveRiskScorer) ─────────────────────
 
     def _attach_severity(
         self,
         result: ReasoningResult,
         seq:    TrackSequence,
     ) -> ReasoningResult:
-        score = result.confidence * _W["confidence"]
-        if seq.total_dwell > 30:
-            score += _W["long_dwell"]
-        if "repeated_approach" in seq.action_summary:
-            score += _W["repeated_approach"]
-        if result.confidence_tier == "high":
-            score += _W["high_tier_bonus"]
-        result.severity_score = round(min(score, 1.0), 3)
+        """Compute severity using the context-aware adaptive risk scorer.
+
+        Builds contextual signals from the reasoning result and track
+        sequence, delegates to :class:`AdaptiveRiskScorer`, and maps
+        the 0–100 risk score back to the 0.0–1.0 ``severity_score`` field.
+        """
+        # Determine whether any visited zone is restricted
+        restricted_keywords = ("restricted", "danger")
+        in_restricted = any(
+            any(kw in z.lower() for kw in restricted_keywords)
+            for z in seq.zones_visited
+        )
+
+        # Count repeated approaches from structured event data
+        approach_count = sum(
+            1 for event in seq.events
+            if event.action_hint == ActionHint.REPEATED_APPROACH
+        )
+
+        # Determine after-hours status from current wall-clock hour
+        current_hour = datetime.datetime.now().hour
+        is_after_hours = current_hour >= 20 or current_hour < 6
+
+        signals = {
+            "restricted_zone": in_restricted,
+            "repeated_approach": approach_count,
+            "loitering": seq.total_dwell,
+            "after_hours": is_after_hours,
+            "reasoning_confidence": result.confidence,
+        }
+
+        risk_result = self._risk_scorer.score(signals)
+        result.severity_score = round(risk_result["risk_score"] / 100.0, 3)
         return result
 
     # ── Storage ───────────────────────────────────────────────────────────────
