@@ -163,122 +163,108 @@ class Tracker:
                 continue
 
             tid  = int(t.track_id)
+
             # ── ReID matching ─────────────────────────────────────
-            # ── ReID matching ─────────────────────────────────────
-        if hasattr(t, "features") and t.features:
-        
-            new_embedding = t.features[-1]
+            if hasattr(t, "features") and t.features:
+                new_embedding = t.features[-1]
+                for lost_id, data in list(self._lost_embeddings.items()):
+                    age = self._frame_id - data["last_seen"]
+                    if age > self.max_age:
+                        continue
+                    similarity = self._cosine_similarity(
+                        new_embedding,
+                        data["embedding"],
+                    )
+                    if similarity > self.REID_SIMILARITY_THRESHOLD:
+                        tid = lost_id
+                        t.track_id = lost_id
+                        del self._lost_embeddings[lost_id]
+                        logger.info(f"ReID matched: restored track #{lost_id}")
+                        break
 
-        for lost_id, data in list(self._lost_embeddings.items()):
+            ltwh = t.to_ltwh()
+            x1 = float(ltwh[0])
+            y1 = float(ltwh[1])
+            x2 = x1 + float(ltwh[2])
+            y2 = y1 + float(ltwh[3])
+            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
 
-            age = self._frame_id - data["last_seen"]
+            zones = [z.name for z in get_zones_for_point(cx, cy)]
 
-            if age > self.max_age:
-                continue
+            # ── Lifecycle: BORN ───────────────────────────────────────────
+            if tid not in self._known_ids:
+                self._known_ids.add(tid)
+                self._emit_lifecycle(TrackState.BORN, tid, zones, 0.0)
+                logger.info(f"Track BORN: #{tid} in zones={zones}")
 
-            similarity = self._cosine_similarity(
-                new_embedding,
-                data["embedding"],
+            # ── Dwell time ────────────────────────────────────────────────
+            prev = self._active_tracks.get(tid)
+            dwell_frames = (prev.dwell_time_frames + 1) if prev else 1
+            dwell_secs   = dwell_frames / self.fps
+
+            # ── Trajectory ────────────────────────────────────────────────
+            prev_traj = prev.trajectory if prev else []
+            new_point = TrajectoryPoint(x=cx, y=cy, frame_id=self._frame_id)
+            trajectory = (prev_traj + [new_point])[-self.MAX_TRAJECTORY_LEN:]
+
+            obj = TrackedObject(
+                track_id            = tid,
+                label               = "person",
+                bbox                = [x1, y1, x2, y2],
+                confidence          = float(t.det_conf or 0.0),
+                center              = (cx, cy),
+                dwell_time_frames   = dwell_frames,
+                dwell_time_seconds  = round(dwell_secs, 2),
+                state               = TrackState.ACTIVE,
+                trajectory          = trajectory,
+                zones_present       = zones,
+                last_seen_frame     = self._frame_id,
             )
+            self._active_tracks[tid] = obj
+            current_ids.add(tid)
+            tracked_objects.append(obj)
 
-            if similarity > self.REID_SIMILARITY_THRESHOLD:
+        # ── Lifecycle: LOST for tracks that disappeared ────────────────────
+        for tid, prev_obj in list(self._active_tracks.items()):
+            if tid not in current_ids:
+                frames_since = self._frame_id - prev_obj.last_seen_frame
+                track = next((t for t in raw_tracks if int(t.track_id) == tid), None) if frames_since == 1 else None
 
-                # Restore original ID
-                tid = lost_id
-                t.track_id = lost_id
-
-                del self._lost_embeddings[lost_id]
-
-                logger.info(
-                    f"ReID matched: restored track #{lost_id}"
-                )
-
-                break
-            
-                ltwh = t.to_ltwh()
-                x1 = float(ltwh[0])
-                y1 = float(ltwh[1])
-                x2 = x1 + float(ltwh[2])
-                y2 = y1 + float(ltwh[3])
-                cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-
-                zones = [z.name for z in get_zones_for_point(cx, cy)]
-
-                # ── Lifecycle: BORN ───────────────────────────────────────────
-                if tid not in self._known_ids:
-                    self._known_ids.add(tid)
-                    self._emit_lifecycle(TrackState.BORN, tid, zones, 0.0)
-                    logger.info(f"Track BORN: #{tid} in zones={zones}")
-
-                # ── Dwell time ────────────────────────────────────────────────
-                prev = self._active_tracks.get(tid)
-                dwell_frames = (prev.dwell_time_frames + 1) if prev else 1
-                dwell_secs   = dwell_frames / self.fps
-
-                # ── Trajectory ────────────────────────────────────────────────
-                prev_traj = prev.trajectory if prev else []
-                new_point = TrajectoryPoint(x=cx, y=cy, frame_id=self._frame_id)
-                trajectory = (prev_traj + [new_point])[-self.MAX_TRAJECTORY_LEN:]
-
-                obj = TrackedObject(
-                    track_id            = tid,
-                    label               = "person",
-                    bbox                = [x1, y1, x2, y2],
-                    confidence          = float(t.det_conf or 0.0),
-                    center              = (cx, cy),
-                    dwell_time_frames   = dwell_frames,
-                    dwell_time_seconds  = round(dwell_secs, 2),
-                    state               = TrackState.ACTIVE,
-                    trajectory          = trajectory,
-                    zones_present       = zones,
-                    last_seen_frame     = self._frame_id,
-                )
-                self._active_tracks[tid] = obj
-                current_ids.add(tid)
-                tracked_objects.append(obj)
-
-            # ── Lifecycle: LOST for tracks that disappeared ────────────────────
-            for tid, prev_obj in list(self._active_tracks.items()):
-                if tid not in current_ids:
-                    frames_since = self._frame_id - prev_obj.last_seen_frame
-                    if frames_since == 1:
-                        track = next((t for t in raw_tracks if int(t.track_id) == tid), None)
-
-                    if track is not None and hasattr(track, "features") and track.features:
-                        self._lost_embeddings[tid] = {
-                            "embedding": track.features[-1],
-                            "last_seen": self._frame_id,
+                if track is not None and hasattr(track, "features") and track.features:
+                    self._lost_embeddings[tid] = {
+                        "embedding": track.features[-1],
+                        "last_seen": self._frame_id,
                     }
 
+                self._emit_lifecycle(
+                    TrackState.LOST, tid,
+                    prev_obj.zones_present,
+                    prev_obj.dwell_time_seconds,
+                )
+                if frames_since > self._tracker.max_age:
                     self._emit_lifecycle(
-                        TrackState.LOST, tid,
+                        TrackState.DEAD, tid,
                         prev_obj.zones_present,
                         prev_obj.dwell_time_seconds,
                     )
-                    if frames_since > self._tracker.max_age:
-                        self._emit_lifecycle(
-                            TrackState.DEAD, tid,
-                            prev_obj.zones_present,
-                            prev_obj.dwell_time_seconds,
-                        )
-                        del self._active_tracks[tid]
-                        logger.info(f"Track DEAD: #{tid} after {prev_obj.dwell_time_seconds:.1f}s")
-            # ── Cleanup expired ReID embeddings ──────────────────
-            expired_ids = [
-                tid for tid, data in self._lost_embeddings.items()
-                if self._frame_id - data["last_seen"] > self.max_age
-            ]
+                    del self._active_tracks[tid]
+                    logger.info(f"Track DEAD: #{tid} after {prev_obj.dwell_time_seconds:.1f}s")
 
-            for tid in expired_ids:
-                del self._lost_embeddings[tid]
+        # ── Cleanup expired ReID embeddings ──────────────────
+        expired_ids = [
+            tid for tid, data in self._lost_embeddings.items()
+            if self._frame_id - data["last_seen"] > self.max_age
+        ]
+        for tid in expired_ids:
+            del self._lost_embeddings[tid]
 
-            return TrackedFrame(
-                frame_id     = self._frame_id,
-                camera_id    = self.camera_id,
-                tracks       = tracked_objects,
-                timestamp_ms = time.time() * 1000,
-                fps          = self.fps,
-            )
+        return TrackedFrame(
+            frame_id     = self._frame_id,
+            camera_id    = self.camera_id,
+            tracks       = tracked_objects,
+            timestamp_ms = time.time() * 1000,
+            fps          = self.fps,
+        )
 
     def drain_lifecycle_events(self) -> list[TrackLifecycleEvent]:
         """Pop and return all pending lifecycle events since the last call.
@@ -325,26 +311,20 @@ class Tracker:
         self._lifecycle_queue.append(event)
         if self._event_logger is not None:
             self._event_logger.log_event(event)
-
     def _cosine_similarity(
-        self,
-        a: np.ndarray,
-        b: np.ndarray,
-    ) -> float:
-        """Compute cosine similarity between two embedding vectors.
+            self,
+            a: np.ndarray,
+            b: np.ndarray,
+        ) -> float:
 
-        Args:
-            a: First embedding vector as numpy array.
-            b: Second embedding vector as numpy array.
+            norm_product = np.linalg.norm(a) * np.linalg.norm(b)
 
-        Returns:
-            Float in [0, 1] representing similarity; 0.0 if either norm is zero.
-        """
-        norm_product = np.linalg.norm(a) * np.linalg.norm(b)
-        if norm_product == 0:
-            return 0.0
+            if norm_product == 0:
+                return 0.0
 
-        return float(np.dot(a, b) / norm_product)
+            return float(
+            np.dot(a, b) / norm_product
+        )
 
 
 def main() -> None:
