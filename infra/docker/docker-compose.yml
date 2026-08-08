@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+
+  backend:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PYTHONPATH=/app
+
+  worker:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.backend
+    command: celery -A apps.backend.tasks.celery_app worker --loglevel=info
+    depends_on:
+      - redis
+    restart: always
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PYTHONPATH=/app

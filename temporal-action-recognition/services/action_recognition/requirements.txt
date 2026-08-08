@@ -1,0 +1,8 @@
+# Action Recognition — optional dependencies
+# Install with: pip install -r services/action_recognition/requirements.txt
+torch>=2.0.0
+torchvision>=0.15.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+pydantic>=2.0.0
+onnxruntime>=1.15.0

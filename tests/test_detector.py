@@ -18,7 +18,8 @@ def test_detection_schema_invalid_confidence():
         DetectionSchema(
             label="person",
             confidence=1.5,
-            bbox=BoundingBox(x1=0, y1=0, x2=10, y2=10)
+            bbox=BoundingBox(x1=0, y1=0, x2=10, y2=10),
+            center=(5.0, 5.0)
         )
 
 
@@ -26,7 +27,8 @@ def test_detection_frame_schema_stores_detections():
     det = DetectionSchema(
         label="car",
         confidence=0.9,
-        bbox=BoundingBox(x1=0, y1=0, x2=50, y2=50)
+        bbox=BoundingBox(x1=0, y1=0, x2=50, y2=50),
+        center=(25.0, 25.0)
     )
     frame = DetectionFrameSchema(frame_id=1, detections=[det])
     assert len(frame.detections) == 1

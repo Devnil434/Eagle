@@ -6,7 +6,8 @@ All tests use mock frames and mock detections — no real video or YOLO model ne
 """
 from __future__ import annotations
 
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
@@ -15,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 from libs.schemas.detection import DetectionFrameSchema, DetectionSchema, BoundingBox
 from libs.schemas.tracking  import TrackedFrame, TrackedObject, TrackState, TrajectoryPoint
+from services.tracking.tracker import _interpolate_trajectory
 
 
 # ── Schema unit tests (no tracker needed) ────────────────────────────────────
@@ -485,3 +487,44 @@ def test_reid_expires_after_max_age(MockDeepSort):
 
     # Should NOT restore old ID
     assert result.tracks[0].track_id == 99
+
+
+def test_interpolate_trajectory_success():
+    """Test standard linear interpolation for a 3-frame gap including width and height scaling."""
+    last_pos = {"x": 10.0, "y": 20.0, "w": 50.0, "h": 50.0}
+    new_pos = {"x": 50.0, "y": 60.0, "w": 90.0, "h": 90.0}
+    gap_frames = 3
+    start_frame = 101
+
+    result = _interpolate_trajectory(last_pos, new_pos, gap_frames, start_frame)
+
+    assert len(result) == 3
+    
+    # Assert step progression and metadata across all items
+    expected_values = [
+        {"frame_id": 101, "x": 20.0, "y": 30.0, "w": 60.0, "h": 60.0},
+        {"frame_id": 102, "x": 30.0, "y": 40.0, "w": 70.0, "h": 70.0},
+        {"frame_id": 103, "x": 40.0, "y": 50.0, "w": 80.0, "h": 80.0},
+    ]
+
+    for idx, expected in enumerate(expected_values):
+        assert result[idx]["frame_id"] == expected["frame_id"]
+        assert result[idx]["interpolated"] is True
+        assert result[idx]["x"] == expected["x"]
+        assert result[idx]["y"] == expected["y"]
+        assert result[idx]["w"] == expected["w"]
+        assert result[idx]["h"] == expected["h"]
+
+def test_interpolate_trajectory_no_gap():
+    last_pos = {"x": 10, "y": 20}
+    new_pos = {"x": 20, "y": 30}
+    assert _interpolate_trajectory(last_pos, new_pos, 0, 100) == []
+
+def test_interpolate_trajectory_no_movement():
+    last_pos = {"x": 100.0, "y": 100.0}
+    new_pos = {"x": 100.0, "y": 100.0}
+    gap_frames = 2
+    start_frame = 50
+    result = _interpolate_trajectory(last_pos, new_pos, gap_frames, start_frame)
+    assert len(result) == 2
+    assert result[0]["x"] == 100.0

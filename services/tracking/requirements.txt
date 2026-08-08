@@ -2,6 +2,7 @@ deep-sort-realtime==1.3.2   # ByteTrack-compatible, easiest pip install
 numpy==1.26.4
 opencv-python-headless==4.9.0.80
 pydantic==2.6.4
+prometheus-client==0.20.0
 pytest==8.1.1
 pytest-mock==3.14.0
 ruff==0.4.1
