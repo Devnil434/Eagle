@@ -19,7 +19,7 @@ from services.reasoning.pipeline  import alert_queue   # shared asyncio.Queue
 
 logger = logging.getLogger("eagle.alerts")
 
-router = APIRouter()
+router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 def _parse_alert(raw: str) -> AlertResponse | None:
     try:
