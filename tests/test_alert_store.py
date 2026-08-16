@@ -165,6 +165,35 @@ def test_non_positive_limit_returns_nothing(store):
     assert store.get_alerts_in_range(BASE_MS, BASE_MS + 10_000, limit=0) == []
 
 
+def test_limit_is_global_not_per_camera(store):
+    """Three cameras each holding `limit` alerts must still yield `limit` total."""
+    for camera in ("cam_01", "cam_02", "cam_03"):
+        for i in range(4):
+            seed_alert(
+                store,
+                alert_id=f"{camera}_a{i}",
+                offset_ms=i * 1_000,
+                camera_id=camera,
+            )
+
+    raws = store.get_alerts_in_range(BASE_MS, BASE_MS + 100_000, limit=4)
+
+    assert len(raws) == 4
+
+
+def test_limit_keeps_the_earliest_alerts_across_cameras(store):
+    """The global cap must not favour whichever camera key is scanned first."""
+    seed_alert(store, alert_id="cam1_t4", offset_ms=4_000, camera_id="cam_01")
+    seed_alert(store, alert_id="cam1_t5", offset_ms=5_000, camera_id="cam_01")
+    seed_alert(store, alert_id="cam2_t1", offset_ms=1_000, camera_id="cam_02")
+    seed_alert(store, alert_id="cam2_t2", offset_ms=2_000, camera_id="cam_02")
+    seed_alert(store, alert_id="cam3_t3", offset_ms=3_000, camera_id="cam_03")
+
+    raws = store.get_alerts_in_range(BASE_MS, BASE_MS + 100_000, limit=3)
+
+    assert alert_ids(raws) == ["cam2_t1", "cam2_t2", "cam3_t3"]
+
+
 # ── Bulk feedback ─────────────────────────────────────────────────────────────
 
 def test_bulk_feedback_resolves_only_alerts_with_verdicts(store):

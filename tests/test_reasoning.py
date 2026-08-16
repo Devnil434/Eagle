@@ -364,7 +364,7 @@ def test_pipeline_records_zone_and_object_labels(pipeline, store):
     frame  = np.zeros((480, 640, 3), dtype=np.uint8)
     result = pipeline.run(track_id=20, frame=frame, detections=["person", "backpack"])
     assert result is not None
-    assert result.zone == "safe_corridor"          # first zone visited, as used for dedup
+    assert result.zone == "restricted_door"        # where the behaviour happened
     assert result.zones_visited == ["safe_corridor", "restricted_door"]
     assert result.object_labels == ["person", "backpack"]
 
@@ -378,7 +378,7 @@ def test_pipeline_deduplicates_repeated_object_labels(pipeline, store):
     assert result.object_labels == ["person"]
 
 def test_pipeline_leaves_zone_none_when_no_zone_visited(pipeline, store):
-    """'unknown' is normalised to None so it matches pre-provenance alerts."""
+    """No zone visited leaves None, matching pre-provenance alerts."""
     seq = make_normal_seq(track_id=22)
     for e in seq.events:
         store.store_event(e)
@@ -395,5 +395,21 @@ def test_pipeline_provenance_persists_to_storage(pipeline, store):
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     pipeline.run(track_id=23, frame=frame, detections=["person"])
     stored = ReasoningResult(**json.loads(store.get_alerts("cam_01", limit=1)[0]))
-    assert stored.zone == "safe_corridor"
+    assert stored.zone == "restricted_door"
     assert stored.object_labels == ["person"]
+
+def test_pipeline_reports_the_latest_zone_not_the_deduped_order(pipeline, store):
+    """A track that returns to an earlier zone is reported in that zone.
+
+    `zones_visited` is de-duplicated for readability, so the alert zone comes
+    from the raw event order rather than the last unique entry.
+    """
+    seq = make_suspicious_seq(track_id=24)
+    seq.events[-1].zone = "safe_corridor"
+    for e in seq.events:
+        store.store_event(e)
+    frame  = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = pipeline.run(track_id=24, frame=frame, detections=["person"])
+    assert result is not None
+    assert result.zone == "safe_corridor"
+    assert result.zones_visited == ["safe_corridor", "restricted_door"]

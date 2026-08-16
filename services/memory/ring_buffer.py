@@ -1,5 +1,7 @@
 from __future__ import annotations
+import heapq
 import json
+from itertools import islice
 from typing import Optional
 
 from libs.schemas.memory import TrackEvent, TrackSequence
@@ -81,18 +83,26 @@ class MemoryStore:
 
         keys = [f"alerts:{camera_id}"] if camera_id else self._alert_keys()
 
+        # Redis returns each camera's slice pre-sorted by score, so merging keeps
+        # the timeline chronological across cameras.  Trimming to `limit` after
+        # each merge holds the accumulator at `limit` however many cameras exist,
+        # instead of letting it grow to `limit x cameras` before a final cut.
+        # The result is unchanged: the earliest `limit` alerts overall can only
+        # come from the earliest `limit` of each camera.
         scored: list[tuple[float, str]] = []
         for key in keys:
             items = self._r.zrangebyscore(
                 key, start_ms, end_ms, start=0, num=limit, withscores=True
             )
-            for raw, score in items:
-                scored.append((score, raw if isinstance(raw, str) else raw.decode()))
+            batch = [
+                (score, raw if isinstance(raw, str) else raw.decode())
+                for raw, score in items
+            ]
+            scored = list(
+                islice(heapq.merge(scored, batch, key=lambda pair: pair[0]), limit)
+            )
 
-        # Redis returns each camera's slice pre-sorted; merging several requires
-        # a re-sort so the timeline stays chronological across cameras.
-        scored.sort(key=lambda pair: pair[0])
-        return [raw for _, raw in scored[:limit]]
+        return [raw for _, raw in scored]
 
     def _alert_keys(self) -> list[str]:
         """Discover per-camera alert keys via SCAN (never KEYS, which blocks)."""

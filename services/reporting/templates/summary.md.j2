@@ -7,7 +7,7 @@
 | | |
 | --- | --- |
 | **Window** | {{ s.window.start_ms | ts }} → {{ s.window.end_ms | ts }} ({{ s.window.duration_seconds | duration }}) |
-| **Cameras** | {{ s.cameras | join(", ") if s.cameras else "none" }} |
+| **Cameras** | {{ (s.cameras | join(", ") | oneline) if s.cameras else "none" }} |
 | **Generated** | {{ s.generated_at_ms | ts }} |
 {% if s.truncated %}
 > **Note:** the alert cap for a single report was reached. This summary covers the
@@ -42,7 +42,7 @@ No alerts were recorded in this window.
 | Object | Alerts | Suspicious | Mean conf. | Max conf. | Mean severity |
 | --- | --- | --- | --- | --- | --- |
 {% for g in s.by_object_type %}
-| {{ g.key }} | {{ g.count }} | {{ g.suspicious_count }} | {{ g.mean_confidence | pct }} | {{ g.max_confidence | pct }} | {{ g.mean_severity | pct }} |
+| {{ g.key | oneline }} | {{ g.count }} | {{ g.suspicious_count }} | {{ g.mean_confidence | pct }} | {{ g.max_confidence | pct }} | {{ g.mean_severity | pct }} |
 {% endfor %}
 
 An alert reporting several object classes is counted under each of them, so
@@ -57,7 +57,7 @@ No object classes recorded.
 | Zone | Alerts | Suspicious | Mean conf. | Max conf. | Mean severity |
 | --- | --- | --- | --- | --- | --- |
 {% for g in s.by_zone %}
-| {{ g.key }} | {{ g.count }} | {{ g.suspicious_count }} | {{ g.mean_confidence | pct }} | {{ g.max_confidence | pct }} | {{ g.mean_severity | pct }} |
+| {{ g.key | oneline }} | {{ g.count }} | {{ g.suspicious_count }} | {{ g.mean_confidence | pct }} | {{ g.max_confidence | pct }} | {{ g.mean_severity | pct }} |
 {% endfor %}
 {% else %}
 No zones recorded.
@@ -69,19 +69,19 @@ No zones recorded.
 Ranked by severity, highest first.
 
 {% for e in s.top_suspicious %}
-### {{ loop.index }}. {{ e.zone or "unknown zone" }} — severity {{ e.severity_score | pct }}
+### {{ loop.index }}. {{ (e.zone | oneline) if e.zone else "unknown zone" }} — severity {{ e.severity_score | pct }}
 
 - **Time:** {{ e.timestamp_ms | ts }}
-- **Camera / track:** {{ e.camera_id }} / {{ e.track_id }}
+- **Camera / track:** {{ e.camera_id | oneline }} / {{ e.track_id }}
 - **Confidence:** {{ e.confidence | pct }}
-- **Key signal:** {{ e.key_signal or "n/a" }}
+- **Key signal:** {{ (e.key_signal | oneline) if e.key_signal else "n/a" }}
 {% if e.object_labels %}
-- **Objects:** {{ e.object_labels | join(", ") }}
+- **Objects:** {{ e.object_labels | join(", ") | oneline }}
 {% endif %}
 {% if e.feedback %}
-- **Operator verdict:** {{ e.feedback }}
+- **Operator verdict:** {{ e.feedback | oneline }}
 {% endif %}
-- **Assessment:** {{ e.reason }}
+- **Assessment:** {{ e.reason | oneline }}
 
 {% endfor %}
 {% else %}
@@ -93,6 +93,6 @@ No suspicious activity was detected in this window.
 | Time | Camera | Track | Verdict | Zone | Conf. | Severity | Assessment |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 {% for e in s.timeline %}
-| {{ e.timestamp_ms | ts }} | {{ e.camera_id }} | {{ e.track_id }} | {{ e.label }} | {{ e.zone or "—" }} | {{ e.confidence | pct }} | {{ e.severity_score | pct }} | {{ e.reason | oneline }} |
+| {{ e.timestamp_ms | ts }} | {{ e.camera_id | oneline }} | {{ e.track_id }} | {{ e.label }} | {{ (e.zone | oneline) if e.zone else "—" }} | {{ e.confidence | pct }} | {{ e.severity_score | pct }} | {{ e.reason | oneline }} |
 {% endfor %}
 {% endif %}

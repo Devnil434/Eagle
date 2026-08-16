@@ -110,7 +110,7 @@ class ReasoningPipeline:
         captions = self._collect_captions(frame, seq, detections)
         result   = self._reasoner.reason(seq, captions)
         result   = self._attach_severity(result, seq)
-        result   = self._attach_provenance(result, seq, zone, detections)
+        result   = self._attach_provenance(result, seq, detections)
         result.alert_id   = str(uuid.uuid4())
         result.timestamp_ms = time.time() * 1000
 
@@ -244,16 +244,19 @@ class ReasoningPipeline:
     def _attach_provenance(
         result:     ReasoningResult,
         seq:        TrackSequence,
-        zone:       str,
         detections: Optional[list[str]],
     ) -> ReasoningResult:
         """Record the zone and detected object classes on the alert itself.
 
-        `zone` mirrors the dedup key, so an alert always reports the zone it was
-        suppressed against.  "unknown" is normalised to None to keep the absent
-        case identical to alerts written before these fields existed.
+        `zone` is the most recent zone the track occupied, which is where the
+        behaviour being reported happened — a track that crossed a corridor into
+        a restricted door is an incident at the door, not the corridor.  The full
+        path stays available in `zones_visited`, and dedup still keys off the
+        first zone so suppression behaviour is unaffected.  A track that visited
+        no zone leaves this None, matching alerts written before these fields
+        existed.
         """
-        result.zone          = zone if zone != "unknown" else None
+        result.zone          = seq.zones_visited[-1] if seq.zones_visited else None
         result.zones_visited = _dedupe(seq.zones_visited)
         result.object_labels = _dedupe(detections or [])
         return result

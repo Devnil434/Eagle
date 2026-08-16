@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -33,6 +34,7 @@ def make_alert(
     zone: str | None = "restricted_door",
     object_labels: list[str] | None = None,
     reason: str = "Lingering near the keypad for an extended period.",
+    key_signal: str = "lingering",
 ) -> ReasoningResult:
     return ReasoningResult(
         track_id       = track_id,
@@ -40,7 +42,7 @@ def make_alert(
         label          = label,
         confidence     = confidence,
         reason         = reason,
-        key_signal     = "lingering",
+        key_signal     = key_signal,
         timestamp_ms   = BASE_MS + offset_ms,
         severity_score = severity,
         alert_id       = alert_id,
@@ -279,6 +281,90 @@ def test_markdown_escapes_pipes_so_tables_survive(window):
     report = get_renderer("markdown").render(build_summary(alerts, window)).decode()
 
     assert r"Left bag \| then walked away" in report
+
+
+# ── Untrusted text in report cells ────────────────────────────────────────────
+#
+# `reason` and `key_signal` are model-generated and `camera_id` arrives on the
+# ingest request, so any of them can contain Markdown or HTML metacharacters.
+
+TIMELINE_COLUMNS = 8
+
+
+def markdown_report(window, **alert_kwargs) -> str:
+    summary = build_summary([make_alert(**alert_kwargs)], window)
+    return get_renderer("markdown").render(summary).decode()
+
+
+def timeline_row(report: str) -> str:
+    """The single alert row from the Event Timeline table."""
+    rows = [
+        line for line in report.splitlines()
+        if line.startswith("| ") and " UTC |" in line
+    ]
+    assert len(rows) == 1, f"expected one timeline row, got {len(rows)}"
+    return rows[0]
+
+
+def cell_count(row: str) -> int:
+    """Cells in a Markdown row, ignoring escaped pipes."""
+    return len(re.split(r"(?<!\\)\|", row)) - 2
+
+
+def test_reason_containing_a_pipe_keeps_the_row_intact(window):
+    row = timeline_row(markdown_report(window, reason="Left bag | walked off"))
+
+    assert cell_count(row) == TIMELINE_COLUMNS
+
+
+def test_camera_id_containing_a_pipe_keeps_the_row_intact(window):
+    """camera_id comes from the ingest request, so it is client-controlled."""
+    row = timeline_row(markdown_report(window, camera_id="cam | rogue"))
+
+    assert cell_count(row) == TIMELINE_COLUMNS
+    assert r"cam \| rogue" in row
+
+
+def test_zone_containing_a_pipe_keeps_the_row_intact(window):
+    row = timeline_row(markdown_report(window, zone="door | annex"))
+
+    assert cell_count(row) == TIMELINE_COLUMNS
+
+
+def test_newline_in_reason_collapses_to_one_row(window):
+    report = markdown_report(window, reason="Loitered.\nThen left.\n\nReturned.")
+
+    assert "Loitered. Then left. Returned." in timeline_row(report)
+
+
+def test_html_in_reason_is_neutralised(window):
+    report = markdown_report(window, reason="Carried <b>a bag</b>")
+
+    assert "<b>" not in report
+    assert "&lt;b&gt;a bag&lt;/b&gt;" in report
+
+
+def test_html_in_key_signal_is_neutralised(window):
+    report = markdown_report(window, key_signal="<img src=x>")
+
+    assert "<img" not in report
+    assert "&lt;img src=x&gt;" in report
+
+
+def test_html_in_zone_is_neutralised_in_group_tables(window):
+    report = markdown_report(window, zone="<script>alert(1)</script>")
+
+    assert "<script>" not in report
+    assert "&lt;script&gt;" in report
+
+
+def test_pdf_export_survives_html_in_report_text(window):
+    """fpdf2 raises on nested tags in a cell, so escaping keeps PDF export alive."""
+    summary = build_summary([make_alert(reason="Carried <img src=x> away")], window)
+
+    pdf = get_renderer("pdf").render(summary)
+
+    assert pdf.startswith(b"%PDF")
 
 
 def test_markdown_flags_truncation_to_the_operator(window):

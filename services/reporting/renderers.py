@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from functools import lru_cache
+from html import escape
 from pathlib import Path
 from typing import Literal, Protocol, get_args
 
@@ -84,9 +85,17 @@ def _format_duration(seconds: float) -> str:
 
 
 def _oneline(text: str) -> str:
-    """Make free text safe for a single Markdown table cell."""
-    collapsed = re.sub(r"\s+", " ", text or "").strip()
-    return collapsed.replace("|", "\\|")
+    """Collapse untrusted text to one inert line of Markdown.
+
+    Report text is model-generated (`reason`, `key_signal`) or client-supplied
+    (`camera_id`), so it can contain anything.  A newline or a `|` would break out
+    of a table row, and an HTML-looking fragment survives Markdown conversion
+    intact — `<img ...>` inside a cell makes fpdf2 raise, failing the whole PDF
+    export.  Escaping the HTML metacharacters keeps such text visible as written
+    while leaving nothing for a downstream renderer to interpret.
+    """
+    collapsed = re.sub(r"\s+", " ", str(text or "")).strip()
+    return escape(collapsed, quote=False).replace("|", "\\|")
 
 
 # ── Renderers ─────────────────────────────────────────────────────────────────
