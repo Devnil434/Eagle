@@ -70,6 +70,7 @@ async def ingest_event(
         track_id           = body.track_id,
         frame_id           = 0,
         timestamp_ms       = body.timestamp_ms,
+        label              = body.label,
         zone               = body.zones[0] if body.zones else None,
         action_hint        = ActionHint.UNKNOWN,
         bbox               = body.bbox or [0, 0, 0, 0],

@@ -14,12 +14,12 @@ from libs.schemas.tracking import TrackedFrame
 from libs.schemas.memory   import TrackEvent
 from services.memory.action_classifier import classify_action
 from services.memory.memory import MemoryStore
-from services.memory.kafka_producer import KafkaEventProducer
 from libs.config.settings import settings
 
 if TYPE_CHECKING:
     from services.action_recognition.inference import ActionRecognizer
     from services.memory.memory import MemoryService
+    from services.memory.kafka_producer import KafkaEventProducer
 
 # Shared state for action classifier (tracks zone-entry history)
 _zone_entry_registry: dict[int, set[str]] = {}
@@ -27,9 +27,12 @@ _zone_entry_counts: dict[int, dict[str, int]] = {}
 _last_repeated_approach: dict[int, float] = {}
 _prev_objects: dict[int, object] = {}
 
-# Global Kafka producer instance
-_kafka_producer: KafkaEventProducer | None = None
+# Global Kafka producer instance. confluent_kafka is an optional dependency, so
+# it is imported only when Kafka publishing is switched on.
+_kafka_producer: "KafkaEventProducer | None" = None
 if settings.use_kafka:
+    from services.memory.kafka_producer import KafkaEventProducer
+
     _kafka_producer = KafkaEventProducer()
 
 
@@ -81,6 +84,7 @@ def process_tracked_frame(
             camera_id          = tracked.camera_id,
             frame_id           = tracked.frame_id,
             timestamp_ms       = time.time() * 1000,
+            label              = obj.label,
             zone               = obj.zones_present[0] if obj.zones_present else None,
             action_hint        = hint,
             bbox               = obj.bbox,
