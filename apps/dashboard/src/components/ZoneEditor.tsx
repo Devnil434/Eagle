@@ -91,7 +91,7 @@ function clamp(value: number, min: number, max: number): number {
  * centred name label onto the given 2D context.
  * Requires at least MIN_POLYGON_POINTS points to render.
  */
-function drawZone(ctx: CanvasRenderingContext2D, zone: Zone): void {
+function drawZone(ctx: CanvasRenderingContext2D, zone: Zone, selected: boolean): void {
   if (zone.points.length < MIN_POLYGON_POINTS) return;
 
   ctx.beginPath();
@@ -101,8 +101,8 @@ function drawZone(ctx: CanvasRenderingContext2D, zone: Zone): void {
 
   ctx.fillStyle = hexToRgba(zone.color, 0.25);
   ctx.fill();
-  ctx.strokeStyle = zone.color;
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = selected ? "#ffffff" : zone.color;
+  ctx.lineWidth = selected ? 3 : 2;
   ctx.stroke();
 
   // Draw zone name at centroid
@@ -113,6 +113,21 @@ function drawZone(ctx: CanvasRenderingContext2D, zone: Zone): void {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(zone.name, cx, cy);
+}
+
+/**
+ * Draws resize handles (small circles) at each vertex of a zone.
+ */
+function drawResizeHandles(ctx: CanvasRenderingContext2D, zone: Zone): void {
+  zone.points.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, resizeHandleRadius, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.fill();
+    ctx.strokeStyle = zone.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
 }
 
 /**
@@ -176,31 +191,46 @@ export default function ZoneEditor() {
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
   const [snapshotError,  setSnapshotError]  = useState(false);
 
-  // [Fix 3] Hydration gate — block editing until /zones read completes.
   const [zonesHydrated,  setZonesHydrated]  = useState(false);
   const [zonesLoadError, setZonesLoadError] = useState(false);
 
-  // [Fix 1] Keyboard virtual cursor — starts at canvas centre.
   const [keyCursor, setKeyCursor] = useState<Point>({ x: CANVAS_W / 2, y: CANVAS_H / 2 });
+
+  const [editorMode, setEditorMode] = useState<"draw" | "resize">("draw");
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [draggedVertex, setDraggedVertex] = useState<{ zoneId: string; index: number } | null>(null);
 
   // ── Refs ───────────────────────────────────────────────────────────────────
 
-  /**
-   * Always-current ref to zones array.
-   * Prevents stale closure bugs — closePolygon reads this
-   * instead of the captured zones snapshot from render time.
-   */
   const zonesRef = useRef<Zone[]>([]);
   useEffect(() => { zonesRef.current = zones; }, [zones]);
 
-  /**
-   * [Fix 2] Save-nonce ref — incremented on every zone mutation.
-   * saveZones() captures the value before the fetch; if it has changed
-   * by the time the response arrives, the result is treated as stale and
-   * we do NOT show "✓ Saved!".
-   */
   const saveNonceRef = useRef<number>(0);
   useEffect(() => { saveNonceRef.current += 1; }, [zones]);
+
+  const resizeHandleRadius = 6;
+
+  // ── Resize helpers ─────────────────────────────────────────────────────────
+
+  function findVertexNear(pt: Point, threshold: number = 10): { zoneId: string; index: number } | null {
+    for (const zone of zones) {
+      for (let i = 0; i < zone.points.length; i++) {
+        if (dist(pt, zone.points[i]) <= threshold) {
+          return { zoneId: zone.id, index: i };
+        }
+      }
+    }
+    return null;
+  }
+
+  function getResizeCursor(pt: Point): React.CSSProperties["cursor"] {
+    if (editorMode === "draw") {
+      if (draft.length >= MIN_POLYGON_POINTS && dist(pt, draft[0]) <= CLOSE_RADIUS) return "cell";
+      return "crosshair";
+    }
+    const hit = findVertexNear(pt, resizeHandleRadius + 4);
+    return hit ? "grab" : "default";
+  }
 
   // ── Load snapshot on mount ─────────────────────────────────────────────────
   useEffect(() => {
@@ -268,7 +298,6 @@ export default function ZoneEditor() {
     if (imgRef.current) {
       ctx.drawImage(imgRef.current, 0, 0, canvas.width, canvas.height);
     } else {
-      // Placeholder background when snapshot is unavailable
       ctx.fillStyle = "#1a1a2e";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#64748b";
@@ -282,9 +311,12 @@ export default function ZoneEditor() {
       );
     }
 
-    zones.forEach((z) => drawZone(ctx, z));
+    zones.forEach((z) => drawZone(ctx, z, z.id === selectedZoneId));
+    if (editorMode === "resize") {
+      zones.forEach((z) => drawResizeHandles(ctx, z));
+    }
     drawDraft(ctx, draft, mouse, zoneColor);
-  }, [zones, draft, mouse, zoneColor, snapshotError]);
+  }, [zones, draft, mouse, zoneColor, snapshotError, selectedZoneId, editorMode]);
 
   useEffect(() => { render(); }, [render, snapshotLoaded]);
 
@@ -305,12 +337,19 @@ export default function ZoneEditor() {
 
   // ── Canvas event handlers ──────────────────────────────────────────────────
 
-  /**
-   * Handles canvas click: either closes the polygon (if near first point)
-   * or appends a new vertex to the draft.
-   */
   function handleCanvasClick(e: React.MouseEvent<HTMLCanvasElement>): void {
     const pt = getCanvasPoint(e);
+    if (editorMode === "resize") {
+      const hit = findVertexNear(pt, resizeHandleRadius + 4);
+      if (hit) {
+        setSelectedZoneId(hit.zoneId);
+        setDraggedVertex({ zoneId: hit.zoneId, index: hit.index });
+      } else {
+        setSelectedZoneId(null);
+        setDraggedVertex(null);
+      }
+      return;
+    }
     if (draft.length >= MIN_POLYGON_POINTS && dist(pt, draft[0]) <= CLOSE_RADIUS) {
       closePolygon();
       return;
@@ -318,14 +357,40 @@ export default function ZoneEditor() {
     setDraft((prev) => [...prev, pt]);
   }
 
-  /** Tracks the mouse position for the live rubber-band preview line. */
+  function handleMouseDown(e: React.MouseEvent<HTMLCanvasElement>): void {
+    if (editorMode !== "resize") return;
+    const pt = getCanvasPoint(e);
+    const hit = findVertexNear(pt, resizeHandleRadius + 4);
+    if (hit) {
+      e.preventDefault();
+      setSelectedZoneId(hit.zoneId);
+      setDraggedVertex({ zoneId: hit.zoneId, index: hit.index });
+    }
+  }
+
   function handleMouseMove(e: React.MouseEvent<HTMLCanvasElement>): void {
-    setMouse(getCanvasPoint(e));
+    const pt = getCanvasPoint(e);
+    setMouse(pt);
+    if (draggedVertex) {
+      setZones((prev) =>
+        prev.map((z) => {
+          if (z.id !== draggedVertex.zoneId) return z;
+          const newPoints = [...z.points];
+          newPoints[draggedVertex.index] = pt;
+          return { ...z, points: newPoints };
+        })
+      );
+    }
+  }
+
+  function handleMouseUp(): void {
+    setDraggedVertex(null);
   }
 
   /** Clears the rubber-band endpoint when the cursor leaves the canvas. */
   function handleMouseLeave(): void {
     setMouse(null);
+    setDraggedVertex(null);
   }
 
   // [Fix 1] ── Keyboard handlers ─────────────────────────────────────────────
@@ -543,11 +608,8 @@ export default function ZoneEditor() {
 
   // ── Derived UI values ──────────────────────────────────────────────────────
 
-  /** Cursor becomes "cell" when hovering near the polygon close-target. */
-  const cursorStyle: React.CSSProperties["cursor"] =
-    draft.length >= MIN_POLYGON_POINTS && mouse && dist(mouse, draft[0]) <= CLOSE_RADIUS
-      ? "cell"
-      : "crosshair";
+  /** Cursor reflects current mode and hover state. */
+  const cursorStyle: React.CSSProperties["cursor"] = getResizeCursor(mouse || keyCursor);
 
   /** Button label reflects the current save state. */
   const saveButtonLabel =
@@ -574,14 +636,14 @@ export default function ZoneEditor() {
           ref={canvasRef}
           width={CANVAS_W}
           height={CANVAS_H}
-          // [Fix 1] tabIndex + role make the canvas keyboard-focusable
           tabIndex={0}
           role="application"
           style={{ ...styles.canvas, cursor: cursorStyle }}
           onClick={handleCanvasClick}
+          onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
-          // [Fix 1] Keyboard vertex placement
           onKeyDown={handleKeyDown}
           onFocus={() => setMouse(keyCursor)}
           onBlur={() => setMouse(null)}
@@ -612,7 +674,34 @@ export default function ZoneEditor() {
       {/* ── Controls ── */}
       <div style={styles.controls}>
 
-        {/* Zone name input */}
+        {/* Mode toggle */}
+        <div style={styles.field}>
+          <span style={styles.label}>Mode</span>
+          <div style={styles.palette} role="radiogroup" aria-label="Editor mode">
+            {(["draw", "resize"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={editorMode === m}
+                style={{
+                  ...styles.swatch,
+                  backgroundColor: editorMode === m ? "#38bdf8" : "#334155",
+                  color: "#fff",
+                  width: "auto",
+                  borderRadius: "4px",
+                  padding: "4px 10px",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  outline: editorMode === m ? "2px solid #ffffff" : "none",
+                  outlineOffset: "2px",
+                }}
+                onClick={() => { setEditorMode(m); setDraft([]); setMouse(null); }}
+              >
+                {m === "draw" ? "✏️ Draw" : "↔️ Resize"}
+              </button>
+            ))}
+          </div>
+        </div>
         <div style={styles.field}>
           <label htmlFor="zone-name-input" style={styles.label}>
             Zone name
