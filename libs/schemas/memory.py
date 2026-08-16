@@ -38,6 +38,9 @@ class TrackEvent(BaseModel):
     camera_id:   str              = "cam_01"
     frame_id:    int
     timestamp_ms: float
+    # COCO class of the tracked object, e.g. 'person' or 'car'. Alert rules match
+    # on this; None for events written before it was recorded.
+    label:       Optional[str]    = None
     zone:        Optional[str]    = None   # zone name or None if not in any zone
     action_hint: ActionHint       = ActionHint.UNKNOWN
     temporal_action: Optional[str] = None

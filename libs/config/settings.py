@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     policy_path: str = "policies/default.yaml"
     camera_id: str = "cam_01"
 
+    # ── Configurable alert rules ──────────────────────────────────────────
+    alert_rules_path: str = "config/alert_rules.yaml"
+    # Timezone that time-based rule windows are evaluated in.
+    rules_timezone: str = "UTC"
+    # Minimum seconds between rule-file freshness checks.
+    rules_reload_seconds: float = 30.0
+
     # ── Kafka ─────────────────────────────────────────────────────────────
     use_kafka: bool = False
     kafka_bootstrap_servers: str = "localhost:9092"
