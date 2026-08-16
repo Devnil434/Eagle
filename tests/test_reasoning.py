@@ -6,6 +6,7 @@ Uses MockVLMCaptioner + MockLLMReasoner + fakeredis.
 from __future__ import annotations
 import sys
 import os
+import json
 import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -351,3 +352,48 @@ def test_grounding_check_passes_clean_caption(pipeline):
     detections = ["person"]
     gr = pipeline._ground(caption, detections)
     assert gr.grounded is True
+
+
+# ── Alert provenance tests ────────────────────────────────────────────────────
+
+def test_pipeline_records_zone_and_object_labels(pipeline, store):
+    """Summary reports group by these, so they must survive on the alert."""
+    seq = make_suspicious_seq(track_id=20)
+    for e in seq.events:
+        store.store_event(e)
+    frame  = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = pipeline.run(track_id=20, frame=frame, detections=["person", "backpack"])
+    assert result is not None
+    assert result.zone == "safe_corridor"          # first zone visited, as used for dedup
+    assert result.zones_visited == ["safe_corridor", "restricted_door"]
+    assert result.object_labels == ["person", "backpack"]
+
+def test_pipeline_deduplicates_repeated_object_labels(pipeline, store):
+    seq = make_suspicious_seq(track_id=21)
+    for e in seq.events:
+        store.store_event(e)
+    frame  = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = pipeline.run(track_id=21, frame=frame, detections=["person", "person"])
+    assert result is not None
+    assert result.object_labels == ["person"]
+
+def test_pipeline_leaves_zone_none_when_no_zone_visited(pipeline, store):
+    """'unknown' is normalised to None so it matches pre-provenance alerts."""
+    seq = make_normal_seq(track_id=22)
+    for e in seq.events:
+        store.store_event(e)
+    frame  = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = pipeline.run(track_id=22, frame=frame)
+    assert result is not None
+    assert result.zone is None
+    assert result.zones_visited == []
+
+def test_pipeline_provenance_persists_to_storage(pipeline, store):
+    seq = make_suspicious_seq(track_id=23)
+    for e in seq.events:
+        store.store_event(e)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    pipeline.run(track_id=23, frame=frame, detections=["person"])
+    stored = ReasoningResult(**json.loads(store.get_alerts("cam_01", limit=1)[0]))
+    assert stored.zone == "safe_corridor"
+    assert stored.object_labels == ["person"]

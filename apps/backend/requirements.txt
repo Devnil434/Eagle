@@ -8,6 +8,9 @@ httpx==0.27.0
 sse-starlette==2.1.0
 prometheus-client==0.20.0
 python-multipart>=0.0.30    # file uploads for /snapshot
+jinja2==3.1.6              # incident summary report templates (3.1.6 fixes CVE-2025-27516)
+markdown==3.10.3           # markdown → HTML for PDF export
+fpdf2==2.8.8               # PDF export (pure Python, no system libraries)
 fakeredis==2.21.3          # tests
 pytest==8.1.1
 pytest-asyncio==0.23.6

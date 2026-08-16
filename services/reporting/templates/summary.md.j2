@@ -1,0 +1,98 @@
+{#
+  Markdown incident summary.  The PDF renderer converts this same output to
+  HTML, so report content is defined here once and cannot drift between formats.
+#}
+# Incident Summary Report
+
+| | |
+| --- | --- |
+| **Window** | {{ s.window.start_ms | ts }} → {{ s.window.end_ms | ts }} ({{ s.window.duration_seconds | duration }}) |
+| **Cameras** | {{ s.cameras | join(", ") if s.cameras else "none" }} |
+| **Generated** | {{ s.generated_at_ms | ts }} |
+{% if s.truncated %}
+> **Note:** the alert cap for a single report was reached. This summary covers the
+> earliest alerts in the window only — narrow the range for complete coverage.
+{% endif %}
+
+## Overview
+
+| Metric | Value |
+| --- | --- |
+| Total alerts | {{ s.total_alerts }} |
+| Suspicious | {{ s.suspicious_alerts }} |
+| Normal | {{ s.normal_alerts }} |
+| Actionable | {{ s.actionable_alerts }} |
+
+{% if s.total_alerts == 0 %}
+No alerts were recorded in this window.
+{% else %}
+## Confidence
+
+| Metric | Value |
+| --- | --- |
+| Mean | {{ s.confidence.mean | pct }} |
+| Median | {{ s.confidence.median | pct }} |
+| Range | {{ s.confidence.minimum | pct }} – {{ s.confidence.maximum | pct }} |
+| Std. deviation | {{ (s.confidence.stdev | pct) if s.confidence.stdev is not none else "n/a (single sample)" }} |
+| High / Medium / Low tier | {{ s.confidence.high_tier_count }} / {{ s.confidence.medium_tier_count }} / {{ s.confidence.low_tier_count }} |
+
+## Object Summary
+
+{% if s.by_object_type %}
+| Object | Alerts | Suspicious | Mean conf. | Max conf. | Mean severity |
+| --- | --- | --- | --- | --- | --- |
+{% for g in s.by_object_type %}
+| {{ g.key }} | {{ g.count }} | {{ g.suspicious_count }} | {{ g.mean_confidence | pct }} | {{ g.max_confidence | pct }} | {{ g.mean_severity | pct }} |
+{% endfor %}
+
+An alert reporting several object classes is counted under each of them, so
+these counts may total more than {{ s.total_alerts }}.
+{% else %}
+No object classes recorded.
+{% endif %}
+
+## Zone Summary
+
+{% if s.by_zone %}
+| Zone | Alerts | Suspicious | Mean conf. | Max conf. | Mean severity |
+| --- | --- | --- | --- | --- | --- |
+{% for g in s.by_zone %}
+| {{ g.key }} | {{ g.count }} | {{ g.suspicious_count }} | {{ g.mean_confidence | pct }} | {{ g.max_confidence | pct }} | {{ g.mean_severity | pct }} |
+{% endfor %}
+{% else %}
+No zones recorded.
+{% endif %}
+
+## Suspicious Activities
+
+{% if s.top_suspicious %}
+Ranked by severity, highest first.
+
+{% for e in s.top_suspicious %}
+### {{ loop.index }}. {{ e.zone or "unknown zone" }} — severity {{ e.severity_score | pct }}
+
+- **Time:** {{ e.timestamp_ms | ts }}
+- **Camera / track:** {{ e.camera_id }} / {{ e.track_id }}
+- **Confidence:** {{ e.confidence | pct }}
+- **Key signal:** {{ e.key_signal or "n/a" }}
+{% if e.object_labels %}
+- **Objects:** {{ e.object_labels | join(", ") }}
+{% endif %}
+{% if e.feedback %}
+- **Operator verdict:** {{ e.feedback }}
+{% endif %}
+- **Assessment:** {{ e.reason }}
+
+{% endfor %}
+{% else %}
+No suspicious activity was detected in this window.
+{% endif %}
+
+## Event Timeline
+
+| Time | Camera | Track | Verdict | Zone | Conf. | Severity | Assessment |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+{% for e in s.timeline %}
+| {{ e.timestamp_ms | ts }} | {{ e.camera_id }} | {{ e.track_id }} | {{ e.label }} | {{ e.zone or "—" }} | {{ e.confidence | pct }} | {{ e.severity_score | pct }} | {{ e.reason | oneline }} |
+{% endfor %}
+{% endif %}

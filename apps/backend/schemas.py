@@ -32,6 +32,9 @@ class AlertResponse(BaseModel):
     timestamp_ms:  float
     vlm_captions:  list[str] = Field(default_factory=list)
     feedback:      Optional[str] = None    # "confirmed" | "dismissed" | None
+    zone:          Optional[str] = None    # None on alerts predating provenance capture
+    zones_visited: list[str] = Field(default_factory=list)
+    object_labels: list[str] = Field(default_factory=list)
 
 class FeedbackRequest(BaseModel):
     operator_id: str = "anonymous"
