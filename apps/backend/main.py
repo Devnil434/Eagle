@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +7,7 @@ from prometheus_client import make_asgi_app
 
 from libs.config.settings import settings
 from apps.backend.routes import alerts, ingest, snapshot, cameras, feedback
+from apps.backend.routes.cameras import registry_router
 
 logging.basicConfig(
     level    = logging.INFO,
@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(alerts.router,   prefix="/alerts",   tags=["alerts"])
     app.include_router(snapshot.router, prefix="/snapshot", tags=["snapshot"])
     app.include_router(cameras.router,  prefix="/cameras",  tags=["cameras"])
+    app.include_router(registry_router, prefix="/cameras",  tags=["cameras"])
     app.include_router(feedback.router, prefix="/feedback", tags=["feedback"])
 
     # Prometheus metrics scrape endpoint
