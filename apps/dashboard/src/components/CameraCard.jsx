@@ -1,17 +1,25 @@
 import { trackColors } from "../utils/colors"
 
-export default function CameraCard({ 
-  title = "Unknown Camera", 
-  trackId = "N/A" 
+export default function CameraCard({
+  title = "Unknown Camera",
+  cameraId = "N/A",
+  status = "online",
+  fps = 0,
+  maxFps = 30,
+  fullscreen = false,
 }) {
-
-  const color = trackColors[trackId] || "#6b7280"
+  const color = trackColors[cameraId] || "#6b7280"
+  const healthColor = status === "online" ? "#22c55e" : status === "degraded" ? "#f97316" : "#ef4444"
 
   return (
-    <div className="relative bg-gray-900 rounded-xl overflow-hidden h-[300px]">
-
-      <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-white z-10">
+    <div className={`relative bg-gray-900 rounded-xl overflow-hidden ${fullscreen ? "h-full" : "h-[300px]"}`}>
+      <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-white z-10 flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: healthColor }} />
         {title}
+      </div>
+
+      <div className="absolute top-2 right-2 bg-black/60 px-2 py-1 rounded text-white z-10 text-xs font-mono">
+        {fps.toFixed(1)} / {maxFps} FPS
       </div>
 
       <div
@@ -30,7 +38,7 @@ export default function CameraCard({
             backgroundColor: color
           }}
         >
-          {trackId}
+          {cameraId}
         </div>
       </div>
 
