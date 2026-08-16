@@ -1,5 +1,6 @@
 import { useState } from "react";
 import CameraCard from "../components/CameraCard"
+import VoiceQuery from "../components/VoiceQuery"
 
 export default function Dashboard() {
 
@@ -10,7 +11,7 @@ export default function Dashboard() {
   { id: 2, title: "Camera 2", trackId: "P-102" },
   { id: 3, title: "Camera 3", trackId: "P-101" },
   { id: 4, title: "Camera 4", trackId: "P-103" },
-];
+  ];
   return (
     <div className="flex h-screen bg-black text-white">
       <div className="flex-1 p-4">
@@ -45,11 +46,13 @@ export default function Dashboard() {
       trackId={cam.trackId}
     />
   </div>
-))
+  ))
 }
 </div>
 </div>
-<div className="w-80 bg-zinc-950 border-l border-zinc-800 p-4">
+<div className="w-80 bg-zinc-950 border-l border-zinc-800 p-4 flex flex-col gap-4 overflow-y-auto">
+
+  <VoiceQuery />
 
   {selectedTrack !== null ? (
     <>
