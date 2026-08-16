@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     max_alerts_page: int = 50
     snapshot_dir: str = "/tmp/eagle_snapshots"
 
+    # ── Incident summary reports ──────────────────────────────────────────
+    report_default_window_hours: float = 24.0
+    report_max_window_hours: float = 24.0 * 31
+    report_max_alerts: int = 5_000
+
     # ── Policy ────────────────────────────────────────────────────────────
     policy_path: str = "policies/default.yaml"
     camera_id: str = "cam_01"

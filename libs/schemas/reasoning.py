@@ -15,6 +15,13 @@ class ReasoningResult(BaseModel):
     severity_score: float                            = Field(0.0, ge=0.0, le=1.0)
     alert_id:       Optional[str]                    = None
 
+    # Provenance captured at alert time so downstream consumers (e.g. summary
+    # reports) never have to re-read the ring buffer, which trims to the last
+    # N events per track and expires after `track_ttl_seconds`.
+    zone:           Optional[str]                    = None
+    zones_visited:  list[str]                        = Field(default_factory=list)
+    object_labels:  list[str]                        = Field(default_factory=list)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def confidence_tier(self) -> Literal["high", "medium", "low"]:
