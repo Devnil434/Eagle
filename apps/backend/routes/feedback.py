@@ -14,7 +14,7 @@ from services.memory.ring_buffer import MemoryStore
 
 logger = logging.getLogger("eagle.feedback")
 
-router = APIRouter()
+router = APIRouter(prefix="/feedback", tags=["feedback"])
 
 @router.post("/{alert_id}", response_model=FeedbackResponse)
 def record_feedback(

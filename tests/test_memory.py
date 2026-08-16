@@ -64,6 +64,7 @@ def test_memory_import_does_not_require_cv2(monkeypatch):
     monkeypatch.delitem(sys.modules, "services.tracking", raising=False)
     monkeypatch.delitem(sys.modules, "services.tracking.tracker", raising=False)
     monkeypatch.delitem(sys.modules, "services.memory.memory", raising=False)
+    monkeypatch.delitem(sys.modules, "cv2", raising=False)
 
     imported = importlib.import_module("services.memory.memory")
     assert hasattr(imported, "MemoryStore")
