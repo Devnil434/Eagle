@@ -20,7 +20,7 @@ from services.reasoning.pipeline  import ReasoningPipeline
 
 logger = logging.getLogger("eagle.ingest")
 
-router = APIRouter()
+router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 def _decode_frame(b64: str | None) -> np.ndarray:
     """Decode base64 JPEG to BGR numpy array.  Returns blank frame if None."""
