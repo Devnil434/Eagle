@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import make_asgi_app
 
 from libs.config.settings import settings
-from apps.backend.routes import alerts, ingest, snapshot, cameras, feedback
+from apps.backend.routes import alerts, ingest, snapshot, cameras, feedback, zones
 
 logging.basicConfig(
     level    = logging.INFO,
@@ -35,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(snapshot.router, prefix="/snapshot", tags=["snapshot"])
     app.include_router(cameras.router,  prefix="/cameras",  tags=["cameras"])
     app.include_router(feedback.router, prefix="/feedback", tags=["feedback"])
+    app.include_router(zones.router)
 
     # Prometheus metrics scrape endpoint
     metrics_app = make_asgi_app()
