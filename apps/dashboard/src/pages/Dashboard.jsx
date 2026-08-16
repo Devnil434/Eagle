@@ -1,12 +1,21 @@
 import { useState, useEffect, useMemo } from "react";
 import CameraCard from "../components/CameraCard"
+import VoiceQuery from "../components/VoiceQuery"
 
 const CAMERA_VIEW = "__eagle_cameras__";
 
 export default function Dashboard() {
   const [selectedTrack, setSelectedTrack] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [view, setView] = useState(CAMERA_VIEW);
+  const cameras = [
+  { id: 1, title: "Camera 1", trackId: "P-101" },
+  { id: 2, title: "Camera 2", trackId: "P-102" },
+  { id: 3, title: "Camera 3", trackId: "P-101" },
+  { id: 4, title: "Camera 4", trackId: "P-103" },
+  ];
+  return (
+    <div className="flex h-screen bg-black text-white">
+      <div className="flex-1 p-4">
 
   const featureModules = useMemo(() => {
     try {
@@ -28,10 +37,32 @@ export default function Dashboard() {
     return tabs;
   }, [featureModules]);
 
-  const activeComponent = useMemo(() => {
-    const tab = featureTabs.find((t) => t.id === view);
-    return tab?.component || null;
-  }, [view, featureTabs]);
+  {cameras
+    .filter((cam) =>
+      cam.trackId.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .map((cam) => (
+  <div
+    key={cam.id}
+    onClick={() => setSelectedTrack(cam)}
+    className={`cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-2xl ${
+      selectedTrack?.id === cam.id
+        ? "border-2 border-green-500 scale-105 rounded-lg shadow-green-500/40 shadow-2xl"
+        : ""
+    }`}
+  >
+    <CameraCard
+      title={cam.title}
+      trackId={cam.trackId}
+    />
+  </div>
+  ))
+}
+</div>
+</div>
+<div className="w-80 bg-zinc-950 border-l border-zinc-800 p-4 flex flex-col gap-4 overflow-y-auto">
+
+  <VoiceQuery />
 
   const cameras = [
     { id: 1, title: "Camera 1", trackId: "P-101" },
