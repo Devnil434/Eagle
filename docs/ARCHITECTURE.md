@@ -14,6 +14,7 @@ Eagle is an event-driven surveillance reasoning pipeline that converts raw video
 | Alert Rules | YAML + Pydantic | `TrackSequence` + `config/alert_rules.yaml` | `RuleDecision(matched, rule_id, cooldown)` |
 | VLM Captioning | LLaVA-Next / Qwen-VL | Triggered frame sequence | Natural language captions |
 | LLM Reasoning | Mixtral / GPT-4o / Gemini | Caption sequence + policies | `Alert(label, confidence, reason)` |
+| Incident Reporting | Jinja2 + fpdf2 | Stored alerts for a time window | `IncidentSummary` as Markdown / JSON / PDF |
 | Backend API | FastAPI + Celery | REST requests | JSON API responses |
 | Frontend | React 19 + Vite | SSE / REST payloads | Live dashboard + alert timeline |
 
