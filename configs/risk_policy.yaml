@@ -1,0 +1,38 @@
+# Context-Aware Adaptive Risk Scoring Policy
+# ============================================
+# Weights control how much each contextual signal contributes to the
+# final risk score.  They must sum to 1.0 for correct normalisation.
+#
+# To customise scoring behaviour, adjust the weight values below.
+# The scorer will raise an error on startup if weights do not sum to 1.0.
+
+risk_scoring:
+  restricted_zone:
+    weight: 0.30
+    description: "Subject is inside or entered a restricted zone"
+
+  repeated_approach:
+    weight: 0.25
+    description: "Subject has approached the same zone multiple times"
+
+  loitering:
+    weight: 0.15
+    description: "Subject has been dwelling/lingering beyond threshold"
+
+  after_hours:
+    weight: 0.20
+    description: "Activity detected outside normal operating hours"
+
+  reasoning_confidence:
+    weight: 0.10
+    description: "LLM reasoning confidence as a risk amplifier"
+
+# Thresholds for risk level classification (applied to 0-100 scale)
+risk_levels:
+  low_max: 40
+  medium_max: 70
+
+# Normalization parameters for continuous signals
+normalization:
+  loitering_max_seconds: 120.0
+  repeated_approach_max_count: 5
