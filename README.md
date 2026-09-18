@@ -309,6 +309,34 @@ Human-in-the-loop endpoint to mark an alert as correct or incorrect.
 Request: { "alert_id": "alert_001", "correct": false, "note": "Normal employee" }
 ```
 
+### `GET /reports/summary`
+Incident summary report for a time window: event timeline, object and zone
+breakdowns, ranked suspicious activities, and aggregate confidence statistics.
+Reports reuse the reasoning text stored with each alert, so generating one costs
+no model inference.
+
+| Query param | Default | Meaning |
+|---|---|---|
+| `start` | `end` − 24h | ISO-8601 start of the window (naive values read as UTC) |
+| `end` | now | ISO-8601 end of the window |
+| `camera_id` | all cameras | Restrict the report to one camera |
+| `format` | `markdown` | `markdown`, `json`, or `pdf` |
+| `top_n` | `10` | Suspicious activities to spotlight |
+| `include_dismissed` | `true` | Include alerts an operator dismissed |
+| `download` | `false` | Serve as a file attachment |
+
+```bash
+# Markdown report for the last 24 hours
+curl "http://localhost:8000/reports/summary"
+
+# PDF export for one camera and a specific window
+curl -o incident.pdf "http://localhost:8000/reports/summary?\
+start=2026-06-15T08:00:00Z&end=2026-06-15T18:00:00Z&camera_id=cam_01&format=pdf&download=true"
+```
+
+Alerts written before zone and object provenance were recorded are grouped under
+`unknown` rather than dropped.
+
 ---
 
 ## 🗺️ Roadmap
