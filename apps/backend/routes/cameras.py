@@ -226,6 +226,139 @@ def get_identity(global_id: str, reid=Depends(_get_reid)) -> IdentityResponse:
     return IdentityResponse(global_id=global_id, tokens=tokens)
 
 
+# ── Camera registry router (mounted at /cameras/registry) ─────────────────────
+
+registry_router = APIRouter(prefix="/registry", tags=["cameras"])
+
+
+class CameraRegisterRequest(BaseModel):
+    camera_id:           str         = Field(..., description="Unique camera identifier")
+    label:               str         = Field(..., description="Human-readable label")
+    location:            str         = Field("", description="Physical location description")
+    snapshot_url:        str         = Field("", description="URL for snapshot/stream")
+    max_fps:             float       = Field(30.0, description="Expected maximum FPS")
+
+
+class CameraResponse(BaseModel):
+    camera_id:    str
+    label:        str
+    location:     str
+    snapshot_url: str
+    status:       str           = Field(..., description="online | offline | degraded")
+    last_seen_ms: float         = 0.0
+    fps:          float         = 0.0
+    max_fps:      float         = 30.0
+    alert_count:  int           = 0
+
+
+class FpsUpdateRequest(BaseModel):
+    fps: float = Field(..., ge=0, description="Current observed FPS")
+
+
+_REGISTRY_KEY = "cameras:registry"
+
+
+def _get_all_cameras(redis) -> list[dict]:
+    raw = redis.hgetall(_REGISTRY_KEY)
+    cameras = []
+    for cam_id, raw_json in raw.items():
+        data_str = raw_json if isinstance(raw_json, str) else raw_json.decode()
+        try:
+            cameras.append(json.loads(data_str))
+        except json.JSONDecodeError:
+            continue
+    return cameras
+
+
+def _get_camera(redis, camera_id: str) -> dict | None:
+    raw = redis.hget(_REGISTRY_KEY, camera_id)
+    if raw is None:
+        return None
+    data = raw if isinstance(raw, str) else raw.decode()
+    try:
+        return json.loads(data)
+    except json.JSONDecodeError:
+        return None
+
+
+def _save_camera(redis, camera: dict) -> None:
+    redis.hset(_REGISTRY_KEY, camera["camera_id"], json.dumps(camera))
+
+
+def _delete_camera(redis, camera_id: str) -> bool:
+    return redis.hdel(_REGISTRY_KEY, camera_id) > 0
+
+
+@registry_router.get("", response_model=list[CameraResponse])
+def list_cameras(redis=Depends(_get_redis)) -> list[CameraResponse]:
+    """Return all registered cameras."""
+    cams = _get_all_cameras(redis)
+    return [CameraResponse(**c) for c in cams]
+
+
+@registry_router.get("/{camera_id}", response_model=CameraResponse)
+def get_camera(camera_id: str, redis=Depends(_get_redis)) -> CameraResponse:
+    """Return a single camera by ID."""
+    cam = _get_camera(redis, camera_id)
+    if cam is None:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not registered")
+    return CameraResponse(**cam)
+
+
+@registry_router.post("", response_model=CameraResponse)
+def register_camera(body: CameraRegisterRequest, redis=Depends(_get_redis)) -> CameraResponse:
+    """Register a new camera or update an existing one."""
+    existing = _get_camera(redis, body.camera_id)
+    now_ms = __import__("time").time() * 1000
+    camera = {
+        "camera_id":    body.camera_id,
+        "label":        body.label,
+        "location":     body.location,
+        "snapshot_url": body.snapshot_url,
+        "max_fps":      body.max_fps,
+        "status":       existing.get("status", "online") if existing else "online",
+        "last_seen_ms": existing.get("last_seen_ms", now_ms) if existing else now_ms,
+        "fps":          existing.get("fps", 0.0) if existing else 0.0,
+        "alert_count":  existing.get("alert_count", 0) if existing else 0,
+    }
+    _save_camera(redis, camera)
+    return CameraResponse(**camera)
+
+
+@registry_router.delete("/{camera_id}")
+def unregister_camera(camera_id: str, redis=Depends(_get_redis)) -> dict[str, str]:
+    """Remove a camera from the registry."""
+    if not _delete_camera(redis, camera_id):
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not registered")
+    return {"detail": f"Camera '{camera_id}' unregistered"}
+
+
+@registry_router.get("/{camera_id}/health", response_model=CameraResponse)
+def get_camera_health(camera_id: str, redis=Depends(_get_redis)) -> CameraResponse:
+    """Return health status for a camera."""
+    cam = _get_camera(redis, camera_id)
+    if cam is None:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not registered")
+    return CameraResponse(**cam)
+
+
+@registry_router.post("/{camera_id}/fps", response_model=CameraResponse)
+def update_camera_fps(
+    camera_id: str,
+    body: FpsUpdateRequest,
+    redis=Depends(_get_redis),
+) -> CameraResponse:
+    """Update the observed FPS for a camera."""
+    cam = _get_camera(redis, camera_id)
+    if cam is None:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not registered")
+    cam["fps"] = body.fps
+    cam["last_seen_ms"] = __import__("time").time() * 1000
+    cam["status"] = "online" if body.fps > 0 else "offline"
+    _save_camera(redis, cam)
+    return CameraResponse(**cam)
+
+
 # ── Private helpers ───────────────────────────────────────────────────────────
 
 def _record_to_response(data: dict) -> TrackResponse:

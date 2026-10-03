@@ -140,8 +140,10 @@ Eagle/
 │   │   ├── vlm.py              # Frame captioning (LLaVA-Next)
 │   │   ├── llm.py              # Temporal reasoning
 │   │   └── prompts.py          # Prompt templates
-│   └── memory/
-│       └── memory.py           # Redis ring buffer
+│   ├── memory/
+│   │   └── memory.py           # Redis ring buffer
+│   └── rules/
+│       └── engine.py           # Configurable alert rule matching
 │
 ├── libs/
 │   ├── schemas/                # Pydantic models
@@ -308,6 +310,85 @@ Human-in-the-loop endpoint to mark an alert as correct or incorrect.
 ```json
 Request: { "alert_id": "alert_001", "correct": false, "note": "Normal employee" }
 ```
+
+### `GET /rules`
+Returns the configured alert rules in evaluation order, so an operator can see
+what the pipeline is currently enforcing. `?enabled_only=true` hides switched-off
+rules; `GET /rules/{rule_id}` returns one.
+
+```json
+Response: [
+  {
+    "id": "restricted_door_person",
+    "enabled": true,
+    "object_types": ["person"],
+    "zones": ["restricted_door"],
+    "action_hints": ["lingering", "near_keypad", "repeated_approach"],
+    "min_confidence": 0.6,
+    "time_windows": [],
+    "cooldown_seconds": null,
+    "description": "Person lingering or repeatedly approaching the secure door."
+  }
+]
+```
+
+---
+
+## 🔔 Configurable Alert Rules
+
+By default Eagle alerts on all suspicious activity: a track that entered a zone,
+dwelled past the threshold, and showed a suspicious action. Alert rules let an
+operator narrow that down — for example, only high-confidence people at the
+secure door, and corridor activity only after hours.
+
+Rules are off until you create the file:
+
+```bash
+cp config/alert_rules.example.yaml config/alert_rules.yaml
+```
+
+```yaml
+rules:
+  - id: after_hours_corridor
+    description: Anyone in the corridor outside working hours.
+    zones: [safe_corridor]
+    min_confidence: 0.55
+    time_windows:
+      - start: "19:00"      # may cross midnight
+        end: "07:00"
+  - id: daytime_corridor_person
+    enabled: false          # kept on file, switched off
+    object_types: [person]
+    zones: [safe_corridor]
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | Unique name, reported on the alert it fired |
+| `enabled` | `false` switches a rule off without deleting it |
+| `object_types` | `person`, `vehicle`, `bag`, `device`, or any raw COCO class |
+| `zones` | Zone names from `config/zones.yaml` |
+| `action_hints` | `lingering`, `near_keypad`, `repeated_approach`, … |
+| `min_confidence` | Detector confidence floor, `0.0`–`1.0` |
+| `time_windows` | `start`/`end` (`HH:MM`) plus optional `days` |
+| `cooldown_seconds` | Per-rule override of `REASONING_COOLDOWN_SECONDS` |
+
+Behaviour worth knowing:
+
+- **Rules narrow, never widen.** Activity must still pass the zone, dwell, and
+  suspicious-action gates; a permissive rule cannot force an alert.
+- **Every dimension is ANDed**, and an omitted one means "any". Rules are tried
+  top to bottom and the first match wins, so put specific rules first.
+- **No rules means no change.** An absent file, an empty file, or every rule
+  disabled leaves the default behaviour intact.
+- **Edits apply live.** The file is re-read when it changes; a malformed edit is
+  logged and the last valid rules stay in force.
+- **Only tracked classes can match.** Tracking currently follows people, so
+  `object_types: [person]` is the useful case today; the other groups are ready
+  for when tracking covers more classes.
+
+Set `ALERT_RULES_PATH` to keep the file elsewhere and `RULES_TIMEZONE` to the
+site's timezone so `time_windows` mean local time.
 
 ---
 

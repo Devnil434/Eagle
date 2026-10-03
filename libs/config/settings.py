@@ -57,9 +57,21 @@ class Settings(BaseSettings):
     max_alerts_page: int = 50
     snapshot_dir: str = "/tmp/eagle_snapshots"
 
+    # ── Incident summary reports ──────────────────────────────────────────
+    report_default_window_hours: float = 24.0
+    report_max_window_hours: float = 24.0 * 31
+    report_max_alerts: int = 5_000
+
     # ── Policy ────────────────────────────────────────────────────────────
     policy_path: str = "policies/default.yaml"
     camera_id: str = "cam_01"
+
+    # ── Configurable alert rules ──────────────────────────────────────────
+    alert_rules_path: str = "config/alert_rules.yaml"
+    # Timezone that time-based rule windows are evaluated in.
+    rules_timezone: str = "UTC"
+    # Minimum seconds between rule-file freshness checks.
+    rules_reload_seconds: float = 30.0
 
     # ── Kafka ─────────────────────────────────────────────────────────────
     use_kafka: bool = False
