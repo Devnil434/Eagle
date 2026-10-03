@@ -436,3 +436,58 @@ def test_reasoning_result_id_present_after_set(store):
     store.store_event(evt)
     seq = store.get_sequence(track_id=51)
     assert seq.events[0].reasoning_result_id == "test-alert-id-123"
+
+
+# ── Object class capture ──────────────────────────────────────────────────────
+
+def make_tracked_object(track_id: int, label: str):
+    from libs.schemas.tracking import TrackedObject, TrackState
+
+    return TrackedObject(
+        track_id=track_id, label=label, bbox=[100, 80, 200, 300],
+        confidence=0.9, center=(150, 190), dwell_time_frames=1,
+        dwell_time_seconds=0.0, state=TrackState.ACTIVE,
+        zones_present=["restricted_door"],
+    )
+
+
+def test_label_defaults_to_none_for_legacy_events():
+    """Events stored before the object class was captured must stay readable."""
+    assert make_event(60, 0).label is None
+
+
+def test_label_survives_a_storage_round_trip(store):
+    evt = make_event(61, 0, zone="restricted_door")
+    evt.label = "person"
+    store.store_event(evt)
+
+    assert store.get_sequence(track_id=61).events[0].label == "person"
+
+
+def test_pipeline_records_the_tracked_object_class(store):
+    """Alert rules match on the object class, so the pipeline must persist it."""
+    from libs.schemas.tracking import TrackedFrame
+    from services.memory.pipeline import process_tracked_frame
+
+    frame = TrackedFrame(
+        frame_id=1, camera_id="cam_01", timestamp_ms=time.time() * 1000, fps=30.0,
+        tracks=[make_tracked_object(62, "person")],
+    )
+
+    events = process_tracked_frame(frame, store)
+
+    assert events[0].label == "person"
+    assert store.get_sequence(track_id=62).events[0].label == "person"
+
+
+def test_pipeline_preserves_non_person_classes(store):
+    """The class is taken from the track, not assumed to be 'person'."""
+    from libs.schemas.tracking import TrackedFrame
+    from services.memory.pipeline import process_tracked_frame
+
+    frame = TrackedFrame(
+        frame_id=1, camera_id="cam_01", timestamp_ms=time.time() * 1000, fps=30.0,
+        tracks=[make_tracked_object(63, "backpack")],
+    )
+
+    assert process_tracked_frame(frame, store)[0].label == "backpack"

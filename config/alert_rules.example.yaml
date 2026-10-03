@@ -1,0 +1,81 @@
+# ── Eagle Configurable Alert Rules (example) ─────────────────────────────────
+#
+#   cp config/alert_rules.example.yaml config/alert_rules.yaml
+#
+# Copy this file to config/alert_rules.yaml (or point ALERT_RULES_PATH at it) to
+# switch alert rules on. While no rules file exists, Eagle keeps its default
+# behaviour and alerts on all suspicious activity.
+#
+# Rules decide which detected activity is worth notifying an operator about.
+# They narrow the default trigger conditions (zone entry + dwell + suspicious
+# action); they never widen them.
+#
+# Every matching field is optional and omitting it means "any":
+#   object_types     person | vehicle | bag | device, or any raw COCO class
+#                    (e.g. "car"). Groups expand to their member classes.
+#                    Only classes the tracker emits can match — today that is
+#                    'person', so vehicle and bag rules are inert until the
+#                    tracker tracks those classes.
+#   zones            zone names from config/zones.yaml
+#   action_hints     lingering | zone_entry | near_keypad | repeated_approach |
+#                    walking | standing | zone_exit | unknown
+#   min_confidence   0.0–1.0 detector confidence floor
+#   time_windows     start/end (HH:MM, may cross midnight) and optional days
+#   cooldown_seconds overrides REASONING_COOLDOWN_SECONDS for this rule
+#   enabled          set false to switch a rule off without deleting it
+#
+# Rules are evaluated top to bottom and the first match wins, so put the most
+# specific rules first. Edits are picked up automatically — no restart needed.
+#
+# Delete config/alert_rules.yaml (or disable every rule) to restore the default
+# behaviour of alerting on all suspicious activity.
+#
+# Note: rules that name object_types only match events carrying an object class.
+# Events written before Eagle recorded the class have none, so they will not
+# match a typed rule.
+
+rules:
+  # High-confidence people at the restricted door, at any hour.
+  - id: restricted_door_person
+    description: Person lingering or repeatedly approaching the secure door.
+    object_types: [person]
+    zones: [restricted_door]
+    action_hints: [lingering, near_keypad, repeated_approach]
+    min_confidence: 0.6
+
+  # Keypad tampering is always worth a look, regardless of dwell pattern.
+  - id: keypad_interaction
+    description: Anyone interacting with the access keypad.
+    object_types: [person]
+    zones: [keypad_area]
+    min_confidence: 0.5
+    cooldown_seconds: 120
+
+  # Corridor traffic is routine by day and worth a look at night.
+  - id: after_hours_corridor
+    description: Anyone in the corridor outside working hours.
+    zones: [safe_corridor]
+    min_confidence: 0.55
+    time_windows:
+      - start: "19:00"
+        end: "07:00"
+
+  # Weekend activity anywhere in the building is unusual.
+  - id: weekend_activity
+    description: Any person detected over the weekend.
+    object_types: [person]
+    min_confidence: 0.5
+    time_windows:
+      - start: "00:00"
+        end: "23:59"
+        days: [sat, sun]
+
+  # Example of a rule kept on file but switched off.
+  - id: daytime_corridor_person
+    description: Corridor foot traffic during the day — noisy, off by default.
+    enabled: false
+    object_types: [person]
+    zones: [safe_corridor]
+    time_windows:
+      - start: "07:00"
+        end: "19:00"

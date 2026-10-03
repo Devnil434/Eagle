@@ -1,5 +1,7 @@
 from __future__ import annotations
+import heapq
 import json
+from itertools import islice
 from typing import Optional
 
 from libs.schemas.memory import TrackEvent, TrackSequence
@@ -60,6 +62,55 @@ class MemoryStore:
         items = self._r.zrevrange(key, 0, limit - 1)
         return [i if isinstance(i, str) else i.decode() for i in items]
 
+    def get_alerts_in_range(
+        self,
+        start_ms: float,
+        end_ms: float,
+        camera_id: Optional[str] = None,
+        limit: int = 5_000,
+    ) -> list[str]:
+        """Return raw alert JSON for the window [start_ms, end_ms], oldest first.
+
+        Args:
+            start_ms:  Inclusive lower bound (epoch milliseconds).
+            end_ms:    Inclusive upper bound (epoch milliseconds).
+            camera_id: Restrict to one camera; None aggregates every camera.
+            limit:     Hard cap on returned alerts, protecting the caller from
+                       loading an unbounded window into memory.
+        """
+        if start_ms > end_ms or limit <= 0:
+            return []
+
+        keys = [f"alerts:{camera_id}"] if camera_id else self._alert_keys()
+
+        # Redis returns each camera's slice pre-sorted by score, so merging keeps
+        # the timeline chronological across cameras.  Trimming to `limit` after
+        # each merge holds the accumulator at `limit` however many cameras exist,
+        # instead of letting it grow to `limit x cameras` before a final cut.
+        # The result is unchanged: the earliest `limit` alerts overall can only
+        # come from the earliest `limit` of each camera.
+        scored: list[tuple[float, str]] = []
+        for key in keys:
+            items = self._r.zrangebyscore(
+                key, start_ms, end_ms, start=0, num=limit, withscores=True
+            )
+            batch = [
+                (score, raw if isinstance(raw, str) else raw.decode())
+                for raw, score in items
+            ]
+            scored = list(
+                islice(heapq.merge(scored, batch, key=lambda pair: pair[0]), limit)
+            )
+
+        return [raw for _, raw in scored]
+
+    def _alert_keys(self) -> list[str]:
+        """Discover per-camera alert keys via SCAN (never KEYS, which blocks)."""
+        keys = []
+        for key in self._r.scan_iter(match="alerts:*"):
+            keys.append(key if isinstance(key, str) else key.decode())
+        return keys
+
     def get_alert_by_id(self, alert_id: str) -> Optional[str]:
         """Return the raw alert JSON for a given alert_id or None."""
         # Scan recent alerts across camera sets — simple linear search
@@ -93,3 +144,26 @@ class MemoryStore:
             return None
         verdict = self._r.hget(key, "verdict")
         return verdict if isinstance(verdict, str) else (verdict.decode() if verdict else None)
+
+    def get_feedback_bulk(self, alert_ids: list[str]) -> dict[str, str]:
+        """Fetch verdicts for many alerts in a single round-trip.
+
+        Reports resolve feedback for every alert in the window, so the per-alert
+        `get_feedback` would cost one round-trip each.  Alerts without feedback
+        are omitted from the result.
+        """
+        if not alert_ids:
+            return {}
+
+        pipe = self._r.pipeline()
+        for alert_id in alert_ids:
+            pipe.hget(f"feedback:{alert_id}", "verdict")
+        verdicts = pipe.execute()
+
+        resolved: dict[str, str] = {}
+        for alert_id, verdict in zip(alert_ids, verdicts):
+            if verdict:
+                resolved[alert_id] = (
+                    verdict if isinstance(verdict, str) else verdict.decode()
+                )
+        return resolved
